@@ -130,6 +130,45 @@ export class Tensor {
         return this.permute(...indices)
     }
 
+    reshape(shape) {
+        if (!Array.isArray(shape)) {
+            throw new Error("Shape must be 1D array")
+        }
+
+        let pred = shape.every((v) => Number.isInteger(v) && v >= 0)
+        if (!pred) {
+            throw new Error("Shape must contain positive integer")
+        }
+
+        const count = shape.reduce((acc, v) => acc * v, 1);
+        if (count !== this.data.length) {
+            throw new Error(`Invalid reshape: ${count} cannot become ${this.data.length}`)
+        }
+
+        if (this.#isContiguous(shape, this.#calculateStrides(shape))) {
+            let x = new Tensor(this.data, shape)
+            x.strides = this.#calculateStrides(shape)
+            x.offset = this.offset
+            return x
+        }
+
+        throw new Error("Only contiguous reshape supported")
+    }
+
+    #isContiguous(shape, strides) {
+        let expectedStride = 1
+
+        for (let i = shape.length - 1; i >= 0; i--) {
+            if (strides[i] !== expectedStride) {
+                return false
+            }
+
+            expectedStride *= shape[i]
+        }
+
+        return true
+    }
+
     toString() {
         const iter = new TensorIterator(
             this.data,
