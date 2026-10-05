@@ -12,15 +12,34 @@ function validateShape(data) {
         return
     }
 
-    if (Array.isArray(data[0])) {
-        let pred = data.every(v => Array.isArray(v) && v.length === data[0].length)
+    const isFirstArray = Array.isArray(data[0])
 
-        if (pred) {
-            for (let v of data) {
-                validateShape(v)
-            }
-        } else {
-            throw new Error("Invalid shape of tensor")
+    const allMatch = data.every(v => Array.isArray(v) === isFirstArray)
+
+    if (!allMatch) {
+        throw new Error('Invalid data shape: mixed arrays and scalars at the same level');
+    }
+
+
+    if (isFirstArray) {
+        // Ensure all sub-arrays have the exact same length
+        let targetLength = data[0].length;
+        let validLengths = data.every(v => v.length === targetLength);
+
+        if (!validLengths) {
+            throw new Error('Invalid data shape: jagged sub-array lengths');
+        }
+
+        // Recurse into each sub-array
+        for (let e of data) {
+            validateShape(e);
+        }
+    } else {
+        // We are at the leaf level. Ensure every element is a real number!
+        let allNumbers = data.every(v => typeof v === 'number' && !Number.isNan ? !Number.isNaN(v) : !isNaN(v));
+
+        if (!allNumbers) {
+            throw new Error('Invalid data: All tensor elements must be numbers');
         }
     }
 }
@@ -55,10 +74,6 @@ export function normalizeShape(data, shape) {
 
 function countElements(data) {
 
-    if (data instanceof Float32Array) {
-        return data
-    }
-
     const stack = [data]
 
     let count = 0
@@ -79,6 +94,11 @@ function countElements(data) {
 }
 
 export function flattenToFloat32(data) {
+
+    if (data instanceof Float32Array) {
+        return data
+    }
+
     const totalElements = countElements(data)
 
     const resultView = new Float32Array(totalElements)
