@@ -1,5 +1,9 @@
 import { normalizeShape, flattenToFloat32 } from "./util.js"
-import { TensorIterator } from "../iterator/tensor-iteraror.js"
+import { TensorIterator } from "../iterator/tensor-iterator.js"
+import { AddOp } from '../op/add_op.js'
+import { SubOp } from '../op/sub_op.js'
+import { MulOp } from '../op/mul_op.js'
+import { DivOp } from '../op/div_op.js'
 
 export class Tensor {
     constructor(data, shape = []) {
@@ -145,14 +149,80 @@ export class Tensor {
             throw new Error(`Invalid reshape: ${count} cannot become ${this.data.length}`)
         }
 
-        if (this.#isContiguous(shape, this.#calculateStrides(shape))) {
+        if (this.#isContiguous(this.shape, this.strides)) {
+            console.log("C-View")
             let x = new Tensor(this.data, shape)
             x.strides = this.#calculateStrides(shape)
             x.offset = this.offset
             return x
         }
 
-        throw new Error("Only contiguous reshape supported")
+        const newStrides = this.#calculateReshapeStrides(this.shape, this.strides, shape);
+
+        if (newStrides !== null) {
+            console.log("NC-View")
+            let x = new Tensor(this.data, shape)
+            x.strides = newStrides
+            x.offset = this.offset
+            return x
+        }
+
+        // Copy reshape
+        const copiedData = new Float32Array(count)
+
+        let i = 0
+
+        for (let v of this) {
+            copiedData[i] = v
+            i++
+        }
+
+        console.log("Copy")
+        let x = new Tensor(copiedData, shape)
+        x.strides = this.#calculateStrides(shape)
+        x.offset = this.offset
+        return x
+
+    }
+
+    add(other) {
+        if (!(other instanceof Tensor)) {
+            throw new Error("Must be tensor")
+        }
+
+        let op = new AddOp()
+
+        return op.apply(this, other)
+    }
+
+    sub(other) {
+        if (!(other instanceof Tensor)) {
+            throw new Error("Must be tensor")
+        }
+
+        let op = new SubOp()
+
+        return op.apply(this, other)
+    }
+
+    mul(other) {
+        if (!(other instanceof Tensor)) {
+            throw new Error("Must be tensor")
+        }
+
+        let op = new MulOp()
+
+        return op.apply(this, other)
+    }
+
+    div(other) {
+        if (!(other instanceof Tensor)) {
+            throw new Error("Must be tensor")
+        }
+
+        let op = new DivOp()
+
+        return op.apply(this, other)
     }
 
     #isContiguous(shape, strides) {
@@ -167,6 +237,79 @@ export class Tensor {
         }
 
         return true
+    }
+
+    #calculateReshapeStrides(shape, strides, newShape) {
+
+        const size = shape.reduce((a, b) => a * b, 1)
+        const newSize = newShape.reduce((a, b) => a * b, 1)
+
+        if (size !== newSize) {
+            return null
+        }
+
+        // shape=[2,3,4]-> strides=[6,4,1]
+        // strides[i] == shape[i+1]*strides[i+1]
+
+        // Chunking
+        const chunks = []
+        let chunkSize = shape[shape.length - 1]
+        let chunkStride = strides[strides.length - 1]
+
+        for (let i = shape.length - 2; i >= 0; i--) {
+            if (strides[i] == shape[i + 1] * strides[i + 1]) {
+                chunkSize *= shape[i]
+            } else {
+                chunks.push({ size: chunkSize, stride: chunkStride })
+
+                chunkSize = shape[i]
+                chunkStride = strides[i]
+            }
+        }
+
+        chunks.push({ size: chunkSize, strides, chunkStride })
+
+        chunks.reverse()
+
+        // [6, 4] -> [2,1]
+
+        // 3,1,2,2,2
+
+        // Fitting
+        const newStrides = new Array(newShape.length)
+        let chunkIndex = 0
+        let remainingChunkSize = chunks[0].size
+        let currentChunkStride = chunks[0].stride
+
+        for (let i = 0; i < newShape.length; i++) {
+            const dim = newShape[i]
+
+            if (dim === 1) {
+                newStrides[i] = remainingChunkSize * currentChunkStride
+                continue
+            }
+
+            if (remainingChunkSize % dim !== 0) {
+                return null
+            }
+
+            // 2,3,2 -> 12 -> 2
+            // 12, 4 ,2
+            remainingChunkSize /= dim
+            newStrides[i] = remainingChunkSize * currentChunkStride
+
+            if (remainingChunkSize === 1) {
+                chunkIndex++
+
+                if (chunkIndex < chunks.length) {
+                    remainingChunkSize = chunks[chunkIndex].size
+                    currentChunkStride = chunks[chunkIndex].stride
+                }
+            }
+        }
+
+        return (remainingChunkSize === 1 && chunkIndex === chunks.length) ? newStrides : null
+
     }
 
     toString() {

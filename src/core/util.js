@@ -1,3 +1,6 @@
+import { TensorIterator } from '../iterator/tensor-iterator.js'
+import { Tensor } from './tensor.js'
+
 function validateShape(data) {
 
     if (data instanceof Float32Array) {
@@ -120,4 +123,116 @@ export function flattenToFloat32(data) {
     }
 
     return resultView
+}
+
+// aShape = [2,4,3]
+// bShape = [3]
+// result = [2,4,3]
+
+// aDim===bDim || aDim === 1 || bDim === 1
+
+export function broadcastShape(aShape, bShape) {
+    if (!Array.isArray(aShape) || !Array.isArray(bShape)) {
+        throw new Error("Shape must be 1D array")
+    }
+
+    let isAInt = aShape.every(v => Number.isInteger(v) && v > 0);
+    let isBInt = bShape.every(v => Number.isInteger(v) && v > 0);
+
+    if (!isAInt || !isBInt) {
+        throw new Error("Shape must contain positive integer")
+    }
+
+    const resultRank = Math.max(aShape.length, bShape.length)
+
+    const broadcastedShape = new Array(resultRank)
+
+    for (let i = 0; i < resultRank; i++) {
+        const aIdx = aShape.length - 1 - (resultRank - 1 - i)
+        const bIdx = bShape.length - 1 - (resultRank - 1 - i)
+
+        const aDim = aIdx >= 0 ? aShape[aIdx] : 1
+        const bDim = bIdx >= 0 ? bShape[bIdx] : 1
+
+        if (aDim === bDim || aDim === 1 || bDim === 1) {
+            broadcastedShape[i] = Math.max(aDim, bDim)
+        } else {
+            throw new Error(`Cannot broadcast shape ${aShape.toString()} and ${bShape.toString()}`)
+        }
+    }
+
+    return broadcastedShape
+
+}
+
+// aShape = [2,1,3] -> [3,3,1] -> [3,3,1]
+// bShape = [3] -> [1] -> [0,0,1]
+// result = [2,1,3] -> [3,3,1]
+
+
+export function broadcastStrides(inputShape, inputStrides, outputShape) {
+    const rankDiff = outputShape.length - inputShape.length
+
+    const result = new Array(outputShape.length)
+
+    for (let i = 0; i < outputShape.length; i++) {
+        const inputDim = i - rankDiff
+
+        if (inputDim < 0) {
+            // Missing leading dimension
+            result[i] = 0
+        } else if (
+            inputShape[inputDim] === 1 &&
+            outputShape[i] !== 1
+        ) {
+            // Broadcast a singleton dimension
+            result[i] = 0
+        } else {
+            // Preserve the corresponding input stride
+            result[i] = inputStrides[inputDim]
+        }
+    }
+
+    return result
+}
+
+export function broadcastIterator(tensor, outputShape) {
+
+    if (!(tensor instanceof Tensor)) {
+        throw new Error("Expects tensor object")
+    }
+
+    const strides = broadcastStrides(tensor.shape, tensor.strides, outputShape)
+
+    return new TensorIterator(
+        tensor.data,
+        outputShape,
+        strides,
+        tensor.offset
+    )
+
+}
+
+export function elementWiseOp(a, b, operator) {
+
+    if (!(a instanceof Tensor) || !(b instanceof Tensor)) {
+        throw new Error("a and b must be tensor objects")
+    }
+
+    const outputShape = broadcastShape(a.shape, b.shape)
+
+    const result = new Float32Array(
+        outputShape.reduce((acc, v) => acc * v, 1)
+    )
+
+    const aIterator = broadcastIterator(a, outputShape)
+    const bIterator = broadcastIterator(b, outputShape)
+
+    let i = 0
+
+    while (aIterator.hasNext()) {
+        result[i++] = operator(aIterator.next(), bIterator.next())
+    }
+
+    return new Tensor(result, outputShape)
 }
