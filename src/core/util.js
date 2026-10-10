@@ -125,12 +125,6 @@ export function flattenToFloat32(data) {
     return resultView
 }
 
-// aShape = [2,4,3]
-// bShape = [3]
-// result = [2,4,3]
-
-// aDim===bDim || aDim === 1 || bDim === 1
-
 export function broadcastShape(aShape, bShape) {
     if (!Array.isArray(aShape) || !Array.isArray(bShape)) {
         throw new Error("Shape must be 1D array")
@@ -164,11 +158,6 @@ export function broadcastShape(aShape, bShape) {
     return broadcastedShape
 
 }
-
-// aShape = [2,1,3] -> [3,3,1] -> [3,3,1]
-// bShape = [3] -> [1] -> [0,0,1]
-// result = [2,1,3] -> [3,3,1]
-
 
 export function broadcastStrides(inputShape, inputStrides, outputShape) {
     const rankDiff = outputShape.length - inputShape.length
@@ -235,4 +224,40 @@ export function elementWiseOp(a, b, operator) {
     }
 
     return new Tensor(result, outputShape)
+}
+
+export function outputIndex(shape, coordinate) {
+    let index = 0
+
+    for (let i = 0; i < shape.length; i++) {
+        index = index * shape[i] + coordinate[i]
+    }
+
+    return index
+
+}
+
+export function computeReducedShape(shape, axes, keepdim) {
+    if (keepdim) {
+        const output = [...shape]
+        for (const axis of axes) {
+            output[axis] = 1
+        }
+
+        return output
+    }
+
+    const output = new Array(shape.length - axes.length).fill(0)
+
+    let outputIndex = 0
+
+    for (let i = 0; i < shape.length; i++) {
+        if (axes.includes(i)) {
+            continue
+        }
+
+        output[outputIndex++] = shape[i]
+    }
+    return output
+
 }

@@ -1,9 +1,10 @@
 import { normalizeShape, flattenToFloat32 } from "./util.js"
 import { TensorIterator } from "../iterator/tensor-iterator.js"
-import { AddOp } from '../op/add_op.js'
-import { SubOp } from '../op/sub_op.js'
-import { MulOp } from '../op/mul_op.js'
-import { DivOp } from '../op/div_op.js'
+import { AddOp } from '../op/add-op.js'
+import { SubOp } from '../op/sub-op.js'
+import { MulOp } from '../op/mul-op.js'
+import { DivOp } from '../op/div-op.js'
+import { SumOp } from "../op/sum-op.js"
 
 export class Tensor {
     constructor(data, shape = []) {
@@ -46,8 +47,7 @@ export class Tensor {
     }
 
     #calculateStrides(shape) {
-
-
+        
         const strides = new Array(shape.length)
         strides[shape.length - 1] = 1
 
@@ -225,6 +225,12 @@ export class Tensor {
         return op.apply(this, other)
     }
 
+    sum(axes, keepdim = false) {
+        const op = new SumOp()
+
+        return op.apply(this, axes, keepdim)
+    }
+
     #isContiguous(shape, strides) {
         let expectedStride = 1
 
@@ -248,9 +254,6 @@ export class Tensor {
             return null
         }
 
-        // shape=[2,3,4]-> strides=[6,4,1]
-        // strides[i] == shape[i+1]*strides[i+1]
-
         // Chunking
         const chunks = []
         let chunkSize = shape[shape.length - 1]
@@ -271,10 +274,6 @@ export class Tensor {
 
         chunks.reverse()
 
-        // [6, 4] -> [2,1]
-
-        // 3,1,2,2,2
-
         // Fitting
         const newStrides = new Array(newShape.length)
         let chunkIndex = 0
@@ -293,8 +292,6 @@ export class Tensor {
                 return null
             }
 
-            // 2,3,2 -> 12 -> 2
-            // 12, 4 ,2
             remainingChunkSize /= dim
             newStrides[i] = remainingChunkSize * currentChunkStride
 
