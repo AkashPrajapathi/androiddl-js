@@ -10,18 +10,19 @@ import { MaxOp } from "./op/max-op.js"
 import { MeanOp } from "./op/mean-op.js"
 
 export class Tensor {
-    constructor(data, shape = []) {
-        this.data = flattenToFloat32(data)
+    constructor(data, shape) {
+        this.data = flattenToFloat32(data);
 
-        if (shape.length === 0) {
-            normalizeShape(data, shape)
+        if (shape === undefined) {
+            shape = [];
+            normalizeShape(data, shape);
         } else {
-            this.#validateShape(data, shape)
+            this.#validateShape(data, shape);
         }
 
-        this.shape = shape
-        this.strides = this.#calculateStrides(shape)
-        this.offset = 0
+        this.shape = shape;
+        this.strides = this.#calculateStrides(shape);
+        this.offset = 0;
     }
 
     #validateShape(data, shape) {
@@ -50,18 +51,21 @@ export class Tensor {
     }
 
     #calculateStrides(shape) {
-
-        const strides = new Array(shape.length)
-        strides[shape.length - 1] = 1
-
-        let s = 1
-
-        for (let i = shape.length - 2; i >= 0; i--) {
-            s *= shape[i + 1]
-            strides[i] = s
+        if (shape.length === 0) {
+            return [];
         }
 
-        return strides
+        const strides = new Array(shape.length);
+        strides[shape.length - 1] = 1;
+
+        let s = 1;
+
+        for (let i = shape.length - 2; i >= 0; i--) {
+            s *= shape[i + 1];
+            strides[i] = s;
+        }
+
+        return strides;
     }
 
     [Symbol.iterator]() {
