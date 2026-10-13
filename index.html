@@ -13,20 +13,58 @@
 
         import { Tensor } from './androiddl.js'
 
-        let a = new Tensor(
-            [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
-            [2, 4, 3]
-        )
+        let a = new Tensor([2], [], true)
+        let b = new Tensor([3], [], true)
 
-        // let b = a.mean([0, 2])
-        let b = a.sum([0, 1, 2])
+        let c = a.mul(b)
+        let d = c.add(a)
 
-        console.log(a.toString())
-        console.log(b.toString())
+        d.backward()
 
-        console.log(b.shape);   // []
-        console.log(b.strides); // []
-        console.log(b.data);    // Float32Array [540]
+        console.log("a.grad = " + a.grad.toString())
+        console.log("b.grad = " + b.grad.toString())
+        console.log("c.grad = " + c.grad.toString())
+        console.log("d.grad = " + d.grad.toString())
+
+        // const a = new Tensor([6], [], true);
+        // const b = new Tensor([2], [], true);
+        // const c = new Tensor([3], [], true);
+        // const e = new Tensor([4], [], true);
+        // const f = new Tensor([8], [], true);
+        // const g = new Tensor([2], [], true);
+
+        // const u = a.add(b);
+        // const v = a.sub(c);
+        // const w = u.mul(v);
+        // const x = w.div(e);
+        // const y = b.add(c);
+        // const z = x.sub(y);
+        // const p = z.mul(f);
+        // const q = p.div(g);
+        // const r = q.add(u);
+        // const L = r.sub(v);
+
+        // L.backward();
+
+        // console.log("a.grad =", a.grad.toString());
+        // console.log("b.grad =", b.grad.toString());
+        // console.log("c.grad =", c.grad.toString());
+        // console.log("e.grad =", e.grad.toString());
+        // console.log("f.grad =", f.grad.toString());
+        // console.log("g.grad =", g.grad.toString());
+
+        // console.log("u.grad =", u.grad.toString());
+        // console.log("v.grad =", v.grad.toString());
+        // console.log("w.grad =", w.grad.toString());
+        // console.log("x.grad =", x.grad.toString());
+        // console.log("y.grad =", y.grad.toString());
+        // console.log("z.grad =", z.grad.toString());
+        // console.log("p.grad =", p.grad.toString());
+        // console.log("q.grad =", q.grad.toString());
+        // console.log("r.grad =", r.grad.toString());
+        // console.log("L.grad =", L.grad.toString());
+
+
     </script>
 </body>
 

@@ -1,4 +1,4 @@
-import { normalizeShape, flattenToFloat32 } from "./util.js"
+import { normalizeShape, flattenToFloat32, onesLike } from "./util.js"
 import { TensorIterator } from "./iterator/tensor-iterator.js"
 import { AddOp } from './op/add-op.js'
 import { SubOp } from './op/sub-op.js'
@@ -10,7 +10,7 @@ import { MaxOp } from "./op/max-op.js"
 import { MeanOp } from "./op/mean-op.js"
 
 export class Tensor {
-    constructor(data, shape) {
+    constructor(data, shape, requiresGrad = false) {
         this.data = flattenToFloat32(data);
 
         if (shape === undefined) {
@@ -23,6 +23,12 @@ export class Tensor {
         this.shape = shape;
         this.strides = this.#calculateStrides(shape);
         this.offset = 0;
+
+        this.numel = this.data.length
+
+        this.requiresGrad = requiresGrad
+        this.grad = null
+        this.gradFn = null
     }
 
     #validateShape(data, shape) {
@@ -157,7 +163,6 @@ export class Tensor {
         }
 
         if (this.#isContiguous(this.shape, this.strides)) {
-            console.log("C-View")
             let x = new Tensor(this.data, shape)
             x.strides = this.#calculateStrides(shape)
             x.offset = this.offset
@@ -167,7 +172,6 @@ export class Tensor {
         const newStrides = this.#calculateReshapeStrides(this.shape, this.strides, shape);
 
         if (newStrides !== null) {
-            console.log("NC-View")
             let x = new Tensor(this.data, shape)
             x.strides = newStrides
             x.offset = this.offset
@@ -184,7 +188,6 @@ export class Tensor {
             i++
         }
 
-        console.log("Copy")
         let x = new Tensor(copiedData, shape)
         x.strides = this.#calculateStrides(shape)
         x.offset = this.offset
@@ -332,6 +335,87 @@ export class Tensor {
 
         return (remainingChunkSize === 1 && chunkIndex === chunks.length) ? newStrides : null
 
+    }
+
+    backward(grad = null) {
+
+        if (grad === null) {
+            if (this.numel !== 1) {
+                throw new Error('Gradient must be provided for multi-element tensors')
+            }
+
+            grad = onesLike(this)
+
+        } else {
+            if (!(grad instanceof Tensor)) {
+                throw new Error("grad must be tensor of same shape")
+            }
+
+            for (let i = 0; i < this.shape; i++) {
+                if (grad.shape[i] !== this.shape[i]) {
+                    throw new Error(`grad of shape ${grad.shape.toString()} is not valid for tensor of shape ${this.shape.toString()}`)
+                }
+            }
+        }
+
+
+        this.#backward(grad)
+    }
+
+    #buildTopoSort(node) {
+        const visited = new Set()
+        const order = []
+
+        function visit(node, visited, order) {
+            if (visited.has(node)) {
+                return
+            }
+
+            visited.add(node)
+
+            const gradFn = node.gradFn
+
+            if (gradFn !== null) {
+                for (const v of gradFn.inputs) {
+                    visit(v, visited, order)
+                }
+            }
+
+            order.push(node)
+        }
+
+        visit(node, visited, order)
+
+        return order.reverse()
+    }
+
+    #backward(grad) {
+        const order = this.#buildTopoSort(this);
+
+        // Seed the output gradient.
+        this.grad = grad;
+
+        for (const node of order) {
+            if (node.gradFn === null) {
+                continue;
+            }
+
+            const gradFn = node.gradFn;
+            const inputGrads = gradFn.backward(node.grad);
+
+            for (let i = 0; i < gradFn.inputs.length; i++) {
+                const inputGrad = inputGrads[i];
+                const input = gradFn.inputs[i];
+
+                if (input.requiresGrad) {
+                    if (input.grad === null) {
+                        input.grad = inputGrad;
+                    } else {
+                        input.grad = input.grad.add(inputGrad);
+                    }
+                }
+            }
+        }
     }
 
     toString() {

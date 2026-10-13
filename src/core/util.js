@@ -261,3 +261,48 @@ export function computeReducedShape(shape, axes, keepdim) {
     return output
 
 }
+
+export function sumToShape(outputGrad, targetShape) {
+    if (!(outputGrad instanceof Tensor)) {
+        throw new Error("outputGrad must be tensor object")
+    }
+
+    if (!Array.isArray(targetShape)) {
+        throw new Error("targetShape must be 1D array")
+    }
+
+    if (targetShape.length > outputGrad.shape.length) {
+        throw new Error(`${targetShape.toString()} cannot reduce to ${outputGrad.shape.toString()}`)
+    }
+
+    const axes = []
+
+    const leadingDimensions = outputGrad.shape.length - targetShape.length
+
+    for (let i = 0; i < leadingDimensions; i++) {
+        axes.push(i)
+    }
+
+    for (let i = 0; i < targetShape.length; i++) {
+        const outputIndex = leadingDimensions + i
+
+        if (targetShape[i] === 1 && outputGrad.shape[outputIndex] > 1) {
+            axes.push(outputIndex)
+        }
+    }
+
+    if (axes.length === 0) {
+        return outputGrad
+    }
+
+    const reduced = outputGrad.sum(axes, true)
+
+    return reduced.reshape(targetShape)
+
+}
+
+export function onesLike(tensor) {
+    const data = new Float32Array(tensor.numel).fill(1)
+
+    return new Tensor(data, [...tensor.shape])
+}
