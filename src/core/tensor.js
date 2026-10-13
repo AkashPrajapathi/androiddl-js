@@ -1,10 +1,13 @@
 import { normalizeShape, flattenToFloat32 } from "./util.js"
-import { TensorIterator } from "../iterator/tensor-iterator.js"
-import { AddOp } from '../op/add-op.js'
-import { SubOp } from '../op/sub-op.js'
-import { MulOp } from '../op/mul-op.js'
-import { DivOp } from '../op/div-op.js'
-import { SumOp } from "../op/sum-op.js"
+import { TensorIterator } from "./iterator/tensor-iterator.js"
+import { AddOp } from './op/add-op.js'
+import { SubOp } from './op/sub-op.js'
+import { MulOp } from './op/mul-op.js'
+import { DivOp } from './op/div-op.js'
+import { SumOp } from "./op/sum-op.js"
+import { MinOp } from "./op/min-op.js"
+import { MaxOp } from "./op/max-op.js"
+import { MeanOp } from "./op/mean-op.js"
 
 export class Tensor {
     constructor(data, shape = []) {
@@ -47,7 +50,7 @@ export class Tensor {
     }
 
     #calculateStrides(shape) {
-        
+
         const strides = new Array(shape.length)
         strides[shape.length - 1] = 1
 
@@ -227,6 +230,24 @@ export class Tensor {
 
     sum(axes, keepdim = false) {
         const op = new SumOp()
+
+        return op.apply(this, axes, keepdim)
+    }
+
+    min(axes, keepdim = false) {
+        const op = new MinOp()
+
+        return op.apply(this, axes, keepdim)
+    }
+
+    max(axes, keepdim = false) {
+        const op = new MaxOp()
+
+        return op.apply(this, axes, keepdim)
+    }
+
+    mean(axes, keepdim = false) {
+        const op = new MeanOp()
 
         return op.apply(this, axes, keepdim)
     }

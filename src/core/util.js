@@ -1,4 +1,4 @@
-import { TensorIterator } from '../iterator/tensor-iterator.js'
+import { TensorIterator } from './iterator/tensor-iterator.js'
 import { Tensor } from './tensor.js'
 
 function validateShape(data) {

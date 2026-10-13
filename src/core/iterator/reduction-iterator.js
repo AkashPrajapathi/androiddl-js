@@ -1,5 +1,5 @@
 
-import { computeReducedShape } from "../core/util.js";
+import { computeReducedShape } from "../util.js";
 
 export class ReductionIterator {
     constructor(shape, strides, offset, axes, keepdim = false) {

@@ -1,4 +1,4 @@
-import { elementWiseOp } from "../core/util.js";
+import { elementWiseOp } from "../util.js";
 
 export class DivOp {
     apply(a, b) {

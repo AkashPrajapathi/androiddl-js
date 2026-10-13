@@ -1,4 +1,4 @@
-import { elementWiseOp } from "../core/util.js";
+import { elementWiseOp } from "../util.js";
 
 export class AddOp {
     apply(a, b) {

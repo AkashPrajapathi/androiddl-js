@@ -1,12 +1,12 @@
 
-import { Tensor } from "../core/tensor.js";
+import { Tensor } from "../tensor.js";
 import {
     computeReducedShape,
     outputIndex
-} from "../core/util.js";
+} from "../util.js";
 import { ReductionIterator } from "../iterator/reduction-iterator.js";
 
-export class SumOp {
+export class MaxOp {
     apply(tensor, axes, keepdim = false) {
         // Validate tensor.
         if (!(tensor instanceof Tensor)) {
@@ -60,6 +60,7 @@ export class SumOp {
 
         // Allocate zero-initialized output.
         const result = new Float32Array(outputSize);
+        result.fill(Number.NEGATIVE_INFINITY)
 
         // Iterate over input elements and accumulate.
         const iter = new ReductionIterator(
@@ -96,7 +97,9 @@ export class SumOp {
                 );
             }
 
-            result[index] += value;
+            if (result[index] < value) {
+                result[index] = value
+            }
         }
 
         return new Tensor(result, outputShape);
