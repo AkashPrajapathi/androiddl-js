@@ -8,6 +8,7 @@ import { SumOp } from "./op/sum-op.js"
 import { MinOp } from "./op/min-op.js"
 import { MaxOp } from "./op/max-op.js"
 import { MeanOp } from "./op/mean-op.js"
+import { MatMulOp } from "./op/matmul-op.js"
 
 export class Tensor {
     constructor(data, shape, requiresGrad = false) {
@@ -257,6 +258,16 @@ export class Tensor {
         const op = new MeanOp()
 
         return op.apply(this, axes, keepdim)
+    }
+
+    matmul(other) {
+        if (!(other instanceof Tensor)) {
+            throw new Error("Must be tensor")
+        }
+
+        const op = new MatMulOp()
+
+        return op.apply(this, other)
     }
 
     #isContiguous(shape, strides) {

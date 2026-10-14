@@ -11,58 +11,66 @@
 
     <script type="module">
 
-        import { Tensor } from './androiddl.js'
+        import { Tensor } from "./androiddl.js"
 
-        let a = new Tensor([2], [], true)
-        let b = new Tensor([3], [], true)
+        // 1. Matrix × Matrix
+        const a = new Tensor(
+            [1, 2, 3, 4, 5, 6],
+            [2, 3]
+        );
 
-        let c = a.mul(b)
-        let d = c.add(a)
+        const b = new Tensor(
+            [7, 8, 9, 10, 11, 12],
+            [3, 2]
+        );
 
-        d.backward()
+        console.log("Matrix × Matrix:");
+        console.log(a.matmul(b).toString());
 
-        console.log("a.grad = " + a.grad.toString())
-        console.log("b.grad = " + b.grad.toString())
-        console.log("c.grad = " + c.grad.toString())
-        console.log("d.grad = " + d.grad.toString())
 
-        // const a = new Tensor([6], [], true);
-        // const b = new Tensor([2], [], true);
-        // const c = new Tensor([3], [], true);
-        // const e = new Tensor([4], [], true);
-        // const f = new Tensor([8], [], true);
-        // const g = new Tensor([2], [], true);
+        // 2. Matrix × Vector
+        const c = new Tensor(
+            [1, 2, 3, 4, 5, 6],
+            [2, 3]
+        );
 
-        // const u = a.add(b);
-        // const v = a.sub(c);
-        // const w = u.mul(v);
-        // const x = w.div(e);
-        // const y = b.add(c);
-        // const z = x.sub(y);
-        // const p = z.mul(f);
-        // const q = p.div(g);
-        // const r = q.add(u);
-        // const L = r.sub(v);
+        const d = new Tensor(
+            [7, 8, 9],
+            [3]
+        );
 
-        // L.backward();
+        console.log("Matrix × Vector:");
+        console.log(c.matmul(d).toString());
 
-        // console.log("a.grad =", a.grad.toString());
-        // console.log("b.grad =", b.grad.toString());
-        // console.log("c.grad =", c.grad.toString());
-        // console.log("e.grad =", e.grad.toString());
-        // console.log("f.grad =", f.grad.toString());
-        // console.log("g.grad =", g.grad.toString());
 
-        // console.log("u.grad =", u.grad.toString());
-        // console.log("v.grad =", v.grad.toString());
-        // console.log("w.grad =", w.grad.toString());
-        // console.log("x.grad =", x.grad.toString());
-        // console.log("y.grad =", y.grad.toString());
-        // console.log("z.grad =", z.grad.toString());
-        // console.log("p.grad =", p.grad.toString());
-        // console.log("q.grad =", q.grad.toString());
-        // console.log("r.grad =", r.grad.toString());
-        // console.log("L.grad =", L.grad.toString());
+        // 3. Vector × Matrix
+        const e = new Tensor(
+            [1, 2, 3],
+            [3]
+        );
+
+        const f = new Tensor(
+            [4, 5, 6, 7, 8, 9],
+            [3, 2]
+        );
+
+        console.log("Vector × Matrix:");
+        console.log(e.matmul(f).toString());
+
+
+        // 4. Vector × Vector
+        const g = new Tensor(
+            [1, 2, 3],
+            [3]
+        );
+
+        const h = new Tensor(
+            [4, 5, 6],
+            [3]
+        );
+
+        console.log("Vector × Vector:");
+        console.log(g.matmul(h).toString());
 
 
     </script>
