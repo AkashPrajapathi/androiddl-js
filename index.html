@@ -59,14 +59,14 @@
         // Backward pass
         c.backward(gradC);
 
-        // console.log("===== BACKWARD PASS =====");
-        // console.log("gradC shape:", gradC.shape);
+        console.log("===== BACKWARD PASS =====");
+        console.log("gradC shape:", gradC.shape);
 
-        // console.log("gradA shape:", a.grad.shape);
-        // console.log("gradA:", a.grad.toString());
+        console.log("gradA shape:", a.grad.shape);
+        console.log("gradA:", a.grad.toString());
 
-        // console.log("gradB shape:", b.grad.shape);
-        // console.log("gradB:", b.grad.toString());
+        console.log("gradB shape:", b.grad.shape);
+        console.log("gradB:", b.grad.toString());
 
     </script>
 </body>
