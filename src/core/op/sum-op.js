@@ -82,8 +82,8 @@ export class SumOp {
             }
 
             const index = outputIndex(
-                outputShape,
-                pos.outputCoordinate
+                pos.outputCoordinate,
+                outputShape
             );
 
             if (
