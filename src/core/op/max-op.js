@@ -5,6 +5,7 @@ import {
     outputIndex
 } from "../util.js";
 import { ReductionIterator } from "../iterator/reduction-iterator.js";
+import { MinMaxBackward } from "../autograd/minmax-backward.js";
 
 export class MaxOp {
     apply(tensor, axes, keepdim = false) {
@@ -62,6 +63,8 @@ export class MaxOp {
         const result = new Float32Array(outputSize);
         result.fill(Number.NEGATIVE_INFINITY)
 
+        const count = new Int32Array(outputSize)
+
         // Iterate over input elements and accumulate.
         const iter = new ReductionIterator(
             tensor.shape,
@@ -83,8 +86,8 @@ export class MaxOp {
             }
 
             const index = outputIndex(
-                outputShape,
-                pos.outputCoordinate
+                pos.outputCoordinate,
+                outputShape
             );
 
             if (
@@ -99,9 +102,19 @@ export class MaxOp {
 
             if (result[index] < value) {
                 result[index] = value
+                count[index] = 1
+            } else if (value == result[index]) {
+                count[index]++
             }
         }
 
-        return new Tensor(result, outputShape);
+        const output = new Tensor(result, outputShape);
+
+        if (tensor.requiresGrad) {
+            output.requiresGrad = true
+            output.gradFn = new MinMaxBackward([tensor], result, count, axes, keepdim)
+        }
+
+        return output
     }
 }

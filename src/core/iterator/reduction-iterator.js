@@ -132,6 +132,7 @@ export class ReductionIterator {
         }
 
         const value = {
+            inputCoordinate: [...inputCoordinate],
             outputCoordinate: [...this.outputCoordinate],
             physicalIndex
         };
