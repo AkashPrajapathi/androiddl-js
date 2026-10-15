@@ -226,15 +226,16 @@ export function elementWiseOp(a, b, operator) {
     return new Tensor(result, outputShape)
 }
 
-export function outputIndex(shape, coordinate) {
-    let index = 0
+export function outputIndex(coordinates, shape) {
+    let index = 0;
+    let stride = 1;
 
-    for (let i = 0; i < shape.length; i++) {
-        index = index * shape[i] + coordinate[i]
+    for (let d = shape.length - 1; d >= 0; d--) {
+        index += coordinates[d] * stride;
+        stride *= shape[d];
     }
 
-    return index
-
+    return index;
 }
 
 export function computeReducedShape(shape, axes, keepdim) {
@@ -264,41 +265,77 @@ export function computeReducedShape(shape, axes, keepdim) {
 
 export function sumToShape(outputGrad, targetShape) {
     if (!(outputGrad instanceof Tensor)) {
-        throw new Error("outputGrad must be tensor object")
+        throw new Error("outputGrad must be tensor object");
     }
 
     if (!Array.isArray(targetShape)) {
-        throw new Error("targetShape must be 1D array")
+        throw new Error("targetShape must be an array");
+    }
+
+    // Scalar source → broadcast to target shape.
+    if (outputGrad.shape.length === 0) {
+        const size = targetShape.reduce(
+            (acc, dim) => acc * dim,
+            1
+        );
+
+        return new Tensor(
+            new Float32Array(size).fill(
+                outputGrad.data[outputGrad.offset]
+            ),
+            targetShape
+        );
     }
 
     if (targetShape.length > outputGrad.shape.length) {
-        throw new Error(`${targetShape.toString()} cannot reduce to ${outputGrad.shape.toString()}`)
+        throw new Error(
+            `Cannot reduce shape ${outputGrad.shape} to ${targetShape}`
+        );
     }
 
-    const axes = []
+    const leadingDimensions =
+        outputGrad.shape.length - targetShape.length;
 
-    const leadingDimensions = outputGrad.shape.length - targetShape.length
-
-    for (let i = 0; i < leadingDimensions; i++) {
-        axes.push(i)
-    }
-
+    // Validate compatible dimensions.
     for (let i = 0; i < targetShape.length; i++) {
-        const outputIndex = leadingDimensions + i
+        const sourceDim =
+            outputGrad.shape[leadingDimensions + i];
 
-        if (targetShape[i] === 1 && outputGrad.shape[outputIndex] > 1) {
-            axes.push(outputIndex)
+        const targetDim = targetShape[i];
+
+        if (targetDim !== sourceDim && targetDim !== 1) {
+            throw new Error(
+                `Cannot reduce shape ${outputGrad.shape} to ${targetShape}`
+            );
+        }
+    }
+
+    const axes = [];
+
+    // Reduce extra leading dimensions.
+    for (let i = 0; i < leadingDimensions; i++) {
+        axes.push(i);
+    }
+
+    // Reduce dimensions that were broadcast from size 1.
+    for (let i = 0; i < targetShape.length; i++) {
+        const outputAxis = leadingDimensions + i;
+
+        if (
+            targetShape[i] === 1 &&
+            outputGrad.shape[outputAxis] !== 1
+        ) {
+            axes.push(outputAxis);
         }
     }
 
     if (axes.length === 0) {
-        return outputGrad
+        return outputGrad;
     }
 
-    const reduced = outputGrad.sum(axes, true)
+    const reduced = outputGrad.sum(axes, true);
 
-    return reduced.reshape(targetShape)
-
+    return reduced.reshape(targetShape);
 }
 
 export function onesLike(tensor) {
