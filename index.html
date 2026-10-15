@@ -4,74 +4,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>AndroidDL MatMul Backward Test</title>
 </head>
 
 <body>
-
     <script type="module">
+        import { Tensor } from "./androiddl.js";
 
-        import { Tensor } from "./androiddl.js"
-
-        // 1. Matrix × Matrix
+        // A shape: [2, 1, 2, 2]
         const a = new Tensor(
-            [1, 2, 3, 4, 5, 6],
-            [2, 3]
+            [
+                1, 2,
+                3, 4,
+
+                5, 6,
+                7, 8
+            ],
+            [2, 1, 2, 2]
         );
 
+        // B shape: [3, 2, 2]
         const b = new Tensor(
-            [7, 8, 9, 10, 11, 12],
-            [3, 2]
+            [
+                1, 2,
+                3, 4,
+
+                5, 6,
+                7, 8,
+
+                9, 10,
+                11, 12
+            ],
+            [3, 2, 2]
         );
 
-        console.log("Matrix × Matrix:");
-        console.log(a.matmul(b).toString());
+        a.requiresGrad = true;
+        b.requiresGrad = true;
 
+        // Forward pass
+        const c = a.matmul(b);
 
-        // 2. Matrix × Vector
-        const c = new Tensor(
-            [1, 2, 3, 4, 5, 6],
-            [2, 3]
+        console.log("===== FORWARD PASS =====");
+        console.log("A shape:", a.shape);
+        console.log("B shape:", b.shape);
+        console.log("C shape:", c.shape);
+        console.log("C:", c.toString());
+
+        // Seed gradient: shape [2, 3, 2, 2]
+        const gradC = new Tensor(
+            new Array(24).fill(1),
+            [2, 3, 2, 2]
         );
 
-        const d = new Tensor(
-            [7, 8, 9],
-            [3]
-        );
+        // Backward pass
+        c.backward(gradC);
 
-        console.log("Matrix × Vector:");
-        console.log(c.matmul(d).toString());
+        // console.log("===== BACKWARD PASS =====");
+        // console.log("gradC shape:", gradC.shape);
 
+        // console.log("gradA shape:", a.grad.shape);
+        // console.log("gradA:", a.grad.toString());
 
-        // 3. Vector × Matrix
-        const e = new Tensor(
-            [1, 2, 3],
-            [3]
-        );
-
-        const f = new Tensor(
-            [4, 5, 6, 7, 8, 9],
-            [3, 2]
-        );
-
-        console.log("Vector × Matrix:");
-        console.log(e.matmul(f).toString());
-
-
-        // 4. Vector × Vector
-        const g = new Tensor(
-            [1, 2, 3],
-            [3]
-        );
-
-        const h = new Tensor(
-            [4, 5, 6],
-            [3]
-        );
-
-        console.log("Vector × Vector:");
-        console.log(g.matmul(h).toString());
-
+        // console.log("gradB shape:", b.grad.shape);
+        // console.log("gradB:", b.grad.toString());
 
     </script>
 </body>

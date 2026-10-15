@@ -1,3 +1,4 @@
+import { MatMulBackward } from "../autograd/matmul-backward.js";
 import { CoordinateIterator } from "../iterator/coordinate-iterator.js";
 import { Tensor } from "../tensor.js";
 import { broadcastShape, broadcastStrides, outputIndex } from "../util.js";
@@ -40,6 +41,11 @@ export class MatMulOp {
 
         if (bIsVector) {
             return result.reshape(result.shape.slice(0, -1));
+        }
+
+        if (a.requiresGrad || b.requiresGrad) {
+            result.requiresGrad = true
+            result.gradFn = new MatMulBackward([a, b])
         }
 
         return result;
