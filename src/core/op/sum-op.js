@@ -5,6 +5,7 @@ import {
     outputIndex
 } from "../util.js";
 import { ReductionIterator } from "../iterator/reduction-iterator.js";
+import { SumBackward } from "../autograd/sum-backward.js";
 
 export class SumOp {
     apply(tensor, axes, keepdim = false) {
@@ -99,6 +100,13 @@ export class SumOp {
             result[index] += value;
         }
 
-        return new Tensor(result, outputShape);
+        const output = new Tensor(result, outputShape);
+
+        if (tensor.requiresGrad) {
+            output.requiresGrad = true
+            output.gradFn = new SumBackward([tensor], axes)
+        }
+
+        return output
     }
 }

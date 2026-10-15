@@ -338,6 +338,29 @@ export function sumToShape(outputGrad, targetShape) {
     return reduced.reshape(targetShape);
 }
 
+export function expandReducedAxes(input, outputShape) {
+    if (!(input instanceof Tensor)) {
+        throw new Error("expandReducedAxes: input must be a tensor")
+    }
+
+    if (!Array.isArray(outputShape)) {
+        throw new Error("expandReducedAxes: outputShape must be 1D array")
+    }
+
+    const size = outputShape.reduce((a, b) => a * b, 1)
+
+    const iter = broadcastIterator(input, outputShape)
+    const result = new Float32Array(size)
+
+    let i = 0
+
+    while (iter.hasNext()) {
+        result[i++] = iter.next()
+    }
+
+    return new Tensor(result, [...outputShape])
+}
+
 export function onesLike(tensor) {
     const data = new Float32Array(tensor.numel).fill(1)
 

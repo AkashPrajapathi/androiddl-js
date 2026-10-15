@@ -33,10 +33,8 @@
         b.requiresGrad = true;
 
         // Forward pass
-        const c = a.min([1]);
-        const d = b.max([1]);
-
-
+        const c = a.mean([1]);
+        const d = b.sum([1]);
 
         const gradC = new Tensor(
             [10, 20],
@@ -52,8 +50,15 @@
         c.backward(gradC);
         d.backward(gradD);
 
+
+        console.log("C:", c.toString());
+        console.log("gradC:", c.grad.toString());
+
         console.log("A:", a.toString());
         console.log("gradA:", a.grad.toString());
+
+        console.log("D:", d.toString());
+        console.log("gradD:", d.grad.toString());
 
         console.log("B:", b.toString());
         console.log("gradB:", b.grad.toString());

@@ -5,6 +5,7 @@ import {
     outputIndex
 } from "../util.js";
 import { ReductionIterator } from "../iterator/reduction-iterator.js";
+import { MeanBackward } from "../autograd/mean-backward.js";
 
 export class MeanOp {
     apply(tensor, axes, keepdim = false) {
@@ -82,8 +83,8 @@ export class MeanOp {
             }
 
             const index = outputIndex(
-                outputShape,
-                pos.outputCoordinate
+                pos.outputCoordinate,
+                outputShape
             );
 
             if (
@@ -109,6 +110,13 @@ export class MeanOp {
             result[i] /= resultCount
         }
 
-        return new Tensor(result, outputShape);
+        const output = new Tensor(result, outputShape);
+
+        if (tensor.requiresGrad) {
+            output.requiresGrad = true
+            output.gradFn = new MeanBackward([tensor], axes)
+        }
+
+        return output
     }
 }
