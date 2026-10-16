@@ -9,6 +9,9 @@ import { MinOp } from "./op/min-op.js"
 import { MaxOp } from "./op/max-op.js"
 import { MeanOp } from "./op/mean-op.js"
 import { MatMulOp } from "./op/matmul-op.js"
+import { PermuteBackward } from "./autograd/permute-backward.js"
+import { TransposeBackward } from "./autograd/transpose-backward.js"
+import { ReshapeBackward } from "./autograd/reshape-backward.js"
 
 export class Tensor {
     constructor(data, shape, requiresGrad = false) {
@@ -125,6 +128,11 @@ export class Tensor {
         x.strides = newStrides
         x.offset = this.offset
 
+        if (this.requiresGrad) {
+            x.requiresGrad = true
+            x.gradFn = new PermuteBackward([this], [...indices])
+        }
+
         return x
     }
 
@@ -145,7 +153,14 @@ export class Tensor {
         indices[dim0] = b;
         indices[dim1] = a;
 
-        return this.permute(...indices)
+        const output = this.permute(...indices)
+
+        if (this.requiresGrad) {
+            output.requiresGrad = true
+            output.gradFn = new TransposeBackward([this], dim0, dim1)
+        }
+
+        return output
     }
 
     reshape(shape) {
@@ -192,6 +207,13 @@ export class Tensor {
         let x = new Tensor(copiedData, shape)
         x.strides = this.#calculateStrides(shape)
         x.offset = this.offset
+
+
+        if (this.requiresGrad) {
+            x.requiresGrad = true
+            x.gradFn = new ReshapeBackward([this])
+        }
+
         return x
 
     }

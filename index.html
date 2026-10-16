@@ -9,59 +9,30 @@
 
 <body>
     <script type="module">
-        import { Tensor } from "./androiddl.js";
+        import { Tensor, Linear } from "./androiddl.js";
 
-        // A shape: [2, 1, 2, 2]
-        const a = new Tensor(
-            [
-                3, 1, 1, 2,
-                4, 2, 5, 2
-            ],
-            [2, 4]
-        );
+        const layer = new Linear(2, 3);
 
-        // B shape: [3, 2, 2]
-        const b = new Tensor(
-            [
-                1, 4, 4, 2,
-                3, 5, 1, 5
-            ],
-            [2, 4]
-        );
+        const input = new Tensor([
+            [1, 2],
+            [3, 4]
+        ], [2, 2]);
 
-        a.requiresGrad = true;
-        b.requiresGrad = true;
+        const output = layer.forward(input);
 
-        // Forward pass
-        const c = a.mean([1]);
-        const d = b.sum([1]);
+        // Reduce output to a scalar loss.
+        const loss = output.sum([0, 1]);
 
-        const gradC = new Tensor(
-            [10, 20],
-            [2]
-        );
+        console.log("Loss shape:", loss.shape); // []
 
-        const gradD = new Tensor(
-            [10, 20],
-            [2]
-        );
+        // Backpropagation
+        loss.backward();
 
-        // Backward pass
-        c.backward(gradC);
-        d.backward(gradD);
+        console.log("Weight grad shape:", layer.w.grad.shape);
+        console.log("Weight grad:", layer.w.grad.toString());
 
-
-        console.log("C:", c.toString());
-        console.log("gradC:", c.grad.toString());
-
-        console.log("A:", a.toString());
-        console.log("gradA:", a.grad.toString());
-
-        console.log("D:", d.toString());
-        console.log("gradD:", d.grad.toString());
-
-        console.log("B:", b.toString());
-        console.log("gradB:", b.grad.toString());
+        console.log("Bias grad shape:", layer.b.grad.shape);
+        console.log("Bias grad:", layer.b.grad.toString());
 
     </script>
 </body>

@@ -361,6 +361,24 @@ export function expandReducedAxes(input, outputShape) {
     return new Tensor(result, [...outputShape])
 }
 
+export function inversePermuatation(dimensions) {
+    if (!Array.isArray()) {
+        throw new Error("dimensions must be 1D array")
+    }
+
+    if (!dimensions.every(v => Number.isInteger(v) && v >= 0)) {
+        throw new Error("dimensions must have valid axes")
+    }
+
+    const inverse = new Array(dimensions.length)
+
+    for (const i in dimensions) {
+        inverse[dimensions[i]] = i
+    }
+
+    return inverse
+}
+
 export function onesLike(tensor) {
     const data = new Float32Array(tensor.numel).fill(1)
 
