@@ -23,6 +23,10 @@ export class Linear {
     }
 
     forward(input) {
-        return input.matmul(this.w.transpose(0, 1)).add(this.b)
+        let out = input.matmul(this.w.transpose(0, 1))
+        if (this.b !== null) {
+            out = out.add(this.b)
+        }
+        return out
     }
 }
