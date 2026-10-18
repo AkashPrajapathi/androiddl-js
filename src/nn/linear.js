@@ -1,8 +1,11 @@
+import { Module } from "./module.js"
 import { Parameter } from "./parameter.js"
 
-export class Linear {
+export class Linear extends Module {
 
     constructor(inFeatures, outFeatures, bias = true, initializer = "xavier") {
+        super()
+
         this.inFeatures = inFeatures
         this.outFeatures = outFeatures
 
