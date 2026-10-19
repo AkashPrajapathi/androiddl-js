@@ -139,7 +139,7 @@ export class Module {
             }
         }
 
-        return params
+        return modules
     }
 
     stateDict() {
