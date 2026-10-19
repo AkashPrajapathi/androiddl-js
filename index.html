@@ -9,33 +9,44 @@
 
 <body>
     <script type="module">
-        import { Tensor, Linear } from "./androiddl.js";
+        import { Tensor, Linear, Module } from "./androiddl.js";
 
-        const layer = new Linear(2, 3);
-        
-        const input = new Tensor([
-            [1, 2],
-            [3, 4]
-        ], [2, 2]);
+        class Net extends Module {
+            constructor(inFeaturse, outFeatures) {
+                super()
+                this.fc1 = new Linear(inFeaturse, outFeatures)
+                this.fc2 = new Linear(outFeatures, outFeatures)
+                this.fc3 = new Linear(outFeatures, 16)
+            }
 
-        const output = layer.forward(input);
+            forward(x) {
+                x = this.fc1.call(x)
+                x = this.fc2.call(x)
+                x = this.fc3.call(x)
 
-        // Reduce output to a scalar loss.
-        const loss = output.sum([0, 1]);
+                return x
+            }
+        }
 
-        // Backpropagation
-        loss.backward();
+        const net1 = new Net(2, 3)
+        const net2 = new Net(2, 3)
 
-        console.log(layer);
+        // Save net1's parameters
+        const state = net1.stateDict()
 
-        console.log("Loss: ", loss.toString()); // []
-        console.log("Loss grad : ", loss.grad); // []
+        // Load them into net2
+        net2.loadStateDict(state)
 
-        console.log("Weight: ", layer.w.toString());
-        console.log("Weight grad :", layer.w.grad.toString());
+        // Verify that parameters match
+        for (const [name, param] of net1.namedParameters()) {
+            const other = new Map(net2.namedParameters()).get(name)
 
-        console.log("Bias: ", layer.b.toString());
-        console.log("Bias grad: ", layer.b.grad.toString());
+            console.log(
+                name,
+                param.data.every((value, i) => value === other.data[i])
+            )
+        }
+
 
     </script>
 </body>
