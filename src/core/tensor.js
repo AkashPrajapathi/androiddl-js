@@ -13,6 +13,8 @@ import { PermuteBackward } from "./autograd/permute-backward.js"
 import { TransposeBackward } from "./autograd/transpose-backward.js"
 import { ReshapeBackward } from "./autograd/reshape-backward.js"
 import { ReLUOp } from "./op/relu-op.js"
+import { ExpOp } from "./op/exp-op.js"
+import { LogOp } from "./op/log-op.js"
 
 export class Tensor {
     constructor(data, shape, requiresGrad = false) {
@@ -293,8 +295,13 @@ export class Tensor {
         return op.apply(this, other)
     }
 
-    relu() {
-        const op = new ReLUOp()
+    exp() {
+        const op = new ExpOp()
+        return op.apply(this)
+    }
+
+    log() {
+        const op = new LogOp()
         return op.apply(this)
     }
 
