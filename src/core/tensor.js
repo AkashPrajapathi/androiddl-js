@@ -295,6 +295,11 @@ export class Tensor {
         return op.apply(this, other)
     }
 
+    relu() {
+        const op = new ReLUOp()
+        return op.apply(this)
+    }
+
     exp() {
         const op = new ExpOp()
         return op.apply(this)
