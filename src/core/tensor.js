@@ -15,6 +15,7 @@ import { ReshapeBackward } from "./autograd/reshape-backward.js"
 import { ReLUOp } from "./op/relu-op.js"
 import { ExpOp } from "./op/exp-op.js"
 import { LogOp } from "./op/log-op.js"
+import { TanhOp } from "./op/tanh-op.js"
 
 export class Tensor {
     constructor(data, shape, requiresGrad = false) {
@@ -307,6 +308,11 @@ export class Tensor {
 
     log() {
         const op = new LogOp()
+        return op.apply(this)
+    }
+
+    tanh() {
+        const op = new TanhOp()
         return op.apply(this)
     }
 
