@@ -12,6 +12,7 @@ import { MatMulOp } from "./op/matmul-op.js"
 import { PermuteBackward } from "./autograd/permute-backward.js"
 import { TransposeBackward } from "./autograd/transpose-backward.js"
 import { ReshapeBackward } from "./autograd/reshape-backward.js"
+import { ReLUOp } from "./op/relu-op.js"
 
 export class Tensor {
     constructor(data, shape, requiresGrad = false) {
@@ -290,6 +291,11 @@ export class Tensor {
         const op = new MatMulOp()
 
         return op.apply(this, other)
+    }
+
+    relu() {
+        const op = new ReLUOp()
+        return op.apply(this)
     }
 
     #isContiguous(shape, strides) {
