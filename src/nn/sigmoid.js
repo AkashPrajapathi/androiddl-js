@@ -2,8 +2,12 @@ import { SigmoidOp } from "../core/op/sigmoid-op.js";
 import { Module } from "./module.js";
 
 export class Sigmoid extends Module {
+    constructor() {
+        super()
+        this.op = new SigmoidOp()
+    }
+
     forward(x) {
-        const op = new SigmoidOp()
-        return op.apply(x)
+        return this.op.apply(x)
     }
 }

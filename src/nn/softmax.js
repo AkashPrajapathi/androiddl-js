@@ -5,10 +5,10 @@ export class Softmax extends Module {
     constructor(dim = -1) {
         super()
         this.dim = dim
+        this.op = new SoftmaxOp()
     }
 
-    forward(input) {
-        const op = new SoftmaxOp()
-        return op.apply(input, this.dim)
+    forward(x) {
+        return this.op.apply(x, this.dim)
     }
 }
