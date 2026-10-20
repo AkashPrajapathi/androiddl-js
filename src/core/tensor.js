@@ -1,9 +1,9 @@
 import { normalizeShape, flattenToFloat32, onesLike } from "./util.js"
 import { TensorIterator } from "./iterator/tensor-iterator.js"
-import { AddOp } from './op/add-op.js'
-import { SubOp } from './op/sub-op.js'
-import { MulOp } from './op/mul-op.js'
-import { DivOp } from './op/div-op.js'
+import { AddOp } from "./op/add-op.js"
+import { SubOp } from "./op/sub-op.js"
+import { MulOp } from "./op/mul-op.js"
+import { DivOp } from "./op/div-op.js"
 import { SumOp } from "./op/sum-op.js"
 import { MinOp } from "./op/min-op.js"
 import { MaxOp } from "./op/max-op.js"
@@ -167,59 +167,65 @@ export class Tensor {
         return output
     }
 
+
     reshape(shape) {
         if (!Array.isArray(shape)) {
-            throw new Error("Shape must be 1D array")
+            throw new Error("Shape must be 1D array");
         }
 
-        let pred = shape.every((v) => Number.isInteger(v) && v >= 0)
-        if (!pred) {
-            throw new Error("Shape must contain positive integer")
+        const valid = shape.every(
+            v => Number.isInteger(v) && v >= 0
+        );
+
+        if (!valid) {
+            throw new Error("Shape must contain non-negative integers");
         }
 
         const count = shape.reduce((acc, v) => acc * v, 1);
-        if (count !== this.data.length) {
-            throw new Error(`Invalid reshape: ${count} cannot become ${this.data.length}`)
+
+        if (count !== this.numel) {
+            throw new Error(
+                `Invalid reshape: ${count} cannot become ${this.numel}`
+            );
         }
+
+        let x;
 
         if (this.#isContiguous(this.shape, this.strides)) {
-            let x = new Tensor(this.data, shape)
-            x.strides = this.#calculateStrides(shape)
-            x.offset = this.offset
-            return x
+            x = new Tensor(this.data, shape);
+            x.strides = this.#calculateStrides(shape);
+            x.offset = this.offset;
+        } else {
+            const newStrides = this.#calculateReshapeStrides(
+                this.shape,
+                this.strides,
+                shape
+            );
+
+            if (newStrides !== null) {
+                x = new Tensor(this.data, shape);
+                x.strides = newStrides;
+                x.offset = this.offset;
+            } else {
+                // Copy reshape
+                const copiedData = new Float32Array(count);
+
+                let i = 0;
+                for (const v of this) {
+                    copiedData[i++] = v;
+                }
+
+                x = new Tensor(copiedData, shape);
+            }
         }
 
-        const newStrides = this.#calculateReshapeStrides(this.shape, this.strides, shape);
-
-        if (newStrides !== null) {
-            let x = new Tensor(this.data, shape)
-            x.strides = newStrides
-            x.offset = this.offset
-            return x
-        }
-
-        // Copy reshape
-        const copiedData = new Float32Array(count)
-
-        let i = 0
-
-        for (let v of this) {
-            copiedData[i] = v
-            i++
-        }
-
-        let x = new Tensor(copiedData, shape)
-        x.strides = this.#calculateStrides(shape)
-        x.offset = this.offset
-
-
+        // Attach autograd for every reshape path.
         if (this.requiresGrad) {
-            x.requiresGrad = true
-            x.gradFn = new ReshapeBackward([this])
+            x.requiresGrad = true;
+            x.gradFn = new ReshapeBackward([this]);
         }
 
-        return x
-
+        return x;
     }
 
     add(other) {

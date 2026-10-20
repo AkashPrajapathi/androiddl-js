@@ -1,4 +1,3 @@
-import { inversePermuatation } from "../util.js";
 import { GradFn } from "./grad-fn.js";
 
 export class ReshapeBackward extends GradFn {
