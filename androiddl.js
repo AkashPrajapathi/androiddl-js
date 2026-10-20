@@ -6,6 +6,7 @@ import { ReLU } from "./src/nn/relu.js";
 import { Sigmoid } from "./src/nn/sigmoid.js";
 import { Tanh } from "./src/nn/tanh.js";
 import { Parameter } from "./src/nn/parameter.js";
+import { Softmax } from "./src/nn/softmax.js";
 
 
 export {
@@ -16,5 +17,6 @@ export {
     Sequential,
     ReLU,
     Tanh,
-    Sigmoid
+    Sigmoid,
+    Softmax
 }
