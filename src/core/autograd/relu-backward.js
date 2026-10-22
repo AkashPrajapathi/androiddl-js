@@ -10,7 +10,7 @@ export class ReLUBackward extends GradFn {
         const result = new Float32Array(outputGrad.numel)
 
         for (let i = 0; i < outputGrad.numel; i++) {
-            result[i] = this.inputs[0].data[i] > 0 ? outputGrad[i] : 0
+            result[i] = this.inputs[0].data[i] > 0 ? outputGrad.data[i] : 0
         }
 
         const grad = new Tensor(result, [...outputGrad.shape])
