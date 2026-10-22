@@ -19,7 +19,7 @@ export class SGD extends Optimizer {
 
             if (momentum > 0) {
 
-                const state = this.state.get(param)
+                let state = this.state.get(param)
 
                 if (state === undefined) {
                     state = {
@@ -41,6 +41,8 @@ export class SGD extends Optimizer {
 
                     data[i] -= lr * buffer[i]
                 }
+
+                state.initialized = true
 
             } else {
                 for (let i = 0; i < data.length; i++) {
