@@ -228,6 +228,17 @@ export class Tensor {
         return x;
     }
 
+    detach() {
+        const output = new Tensor(this.data, [...this.shape])
+
+        output.strides = [...this.strides]
+        output.offset = this.offset
+        output.requiresGrad = false
+        output.gradFn = null
+
+        return output
+    }
+
     add(other) {
         if (typeof other === "number") {
             other = new Tensor([other], []);
