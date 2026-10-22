@@ -11,44 +11,39 @@ export class MatMulOp {
         const aIsVector = a.shape.length === 1;
         const bIsVector = b.shape.length === 1;
 
-        // Vector × Vector
-        if (aIsVector && bIsVector) {
-            a = a.reshape([1, a.shape[0]]);
-            b = b.reshape([b.shape[0], 1]);
+        const originalA = a;
+        const originalB = b;
 
-            return this.#applyMatrices(a, b).reshape([]);
-        }
-
-        // Vector × Matrix
         if (aIsVector) {
             a = a.reshape([1, a.shape[0]]);
         }
 
-        // Matrix × Vector
         if (bIsVector) {
             b = b.reshape([b.shape[0], 1]);
         }
 
         const result = this.#applyMatrices(a, b);
 
-        // Remove the temporary vector dimension.
-        if (aIsVector) {
-            const shape = [...result.shape];
-            shape.splice(shape.length - 2, 1);
+        let output = result;
 
-            return result.reshape(shape);
+        if (aIsVector) {
+            output = output.reshape(
+                output.shape.slice(0, -2).concat(output.shape.slice(-1))
+            );
         }
 
         if (bIsVector) {
-            return result.reshape(result.shape.slice(0, -1));
+            const shape = [...output.shape];
+            shape.pop();
+            output = output.reshape(shape);
         }
 
-        if (a.requiresGrad || b.requiresGrad) {
-            result.requiresGrad = true
-            result.gradFn = new MatMulBackward([a, b])
+        if (originalA.requiresGrad || originalB.requiresGrad) {
+            output.requiresGrad = true;
+            output.gradFn = new MatMulBackward([originalA, originalB]);
         }
 
-        return result;
+        return output;
     }
 
     #applyMatrices(a, b) {
