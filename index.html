@@ -23,24 +23,6 @@
             Categorical
         } from "./androiddl.js";
 
-        const logits = new Tensor(
-            [[1, 2, 3], [3, 1, 0]],
-            [2, 3],
-            true
-        );
-
-        const dist = new Categorical(logits);
-
-        const actions = dist.sample();
-        const logProb = dist.logProb(actions);
-
-        console.log(actions.shape); // [2]
-        console.log(logProb.shape); // [2]
-
-        logProb.sum().backward();
-
-        console.log(logits.grad.toString());
-
         // const output = document.getElementById("output");
 
         // function log(...args) {

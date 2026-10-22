@@ -229,6 +229,10 @@ export class Tensor {
     }
 
     add(other) {
+        if (typeof other === "number") {
+            other = new Tensor([other], []);
+        }
+
         if (!(other instanceof Tensor)) {
             throw new Error("Must be tensor")
         }
@@ -237,35 +241,43 @@ export class Tensor {
 
         return op.apply(this, other)
     }
-
     sub(other) {
-        if (!(other instanceof Tensor)) {
-            throw new Error("Must be tensor")
+        if (typeof other === "number") {
+            other = new Tensor([other], []);
         }
 
-        let op = new SubOp()
+        if (!(other instanceof Tensor)) {
+            throw new Error("Must be a Tensor or number");
+        }
 
-        return op.apply(this, other)
+        const op = new SubOp();
+        return op.apply(this, other);
     }
 
     mul(other) {
-        if (!(other instanceof Tensor)) {
-            throw new Error("Must be tensor")
+        if (typeof other === "number") {
+            other = new Tensor([other], []);
         }
 
-        let op = new MulOp()
+        if (!(other instanceof Tensor)) {
+            throw new Error("Must be a Tensor or number");
+        }
 
-        return op.apply(this, other)
+        const op = new MulOp();
+        return op.apply(this, other);
     }
 
     div(other) {
-        if (!(other instanceof Tensor)) {
-            throw new Error("Must be tensor")
+        if (typeof other === "number") {
+            other = new Tensor([other], []);
         }
 
-        let op = new DivOp()
+        if (!(other instanceof Tensor)) {
+            throw new Error("Must be a Tensor or number");
+        }
 
-        return op.apply(this, other)
+        const op = new DivOp();
+        return op.apply(this, other);
     }
 
     sum(axes, keepdim = false) {
