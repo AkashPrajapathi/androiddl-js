@@ -4,50 +4,153 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AndroidDL.js</title>
+    <title>AndroidDL.js Training Test</title>
 </head>
 
 <body>
-    <script type="module">
-        import { Tensor, Linear, Module } from "./androiddl.js";
+    <h2>AndroidDL.js End-to-End Test</h2>
+    <pre id="output"></pre>
 
+    <script type="module">
+        import {
+            Tensor,
+            Linear,
+            Module,
+            Sequential,
+            ReLU,
+            SGD,
+            MSELoss
+        } from "./androiddl.js";
+
+        const output = document.getElementById("output");
+
+        function log(...args) {
+            const message = args.join(" ");
+            console.log(message);
+            output.textContent += message + "\n";
+        }
+
+        // 1. Define the network
         class Net extends Module {
-            constructor(inFeaturse, outFeatures) {
-                super()
-                this.fc1 = new Linear(inFeaturse, outFeatures)
-                this.fc2 = new Linear(outFeatures, outFeatures)
-                this.fc3 = new Linear(outFeatures, 16)
+            constructor() {
+                super();
+
+                this.mlp = new Sequential(
+                    new Linear(2, 16),
+                    new ReLU(),
+                    new Linear(16, 16),
+                    new ReLU(),
+                    new Linear(16, 1)
+                );
             }
 
             forward(x) {
-                x = this.fc1.call(x)
-                x = this.fc2.call(x)
-                x = this.fc3.call(x)
-
-                return x
+                return this.mlp.call(x);
             }
         }
 
-        const net1 = new Net(2, 3)
-        const net2 = new Net(2, 3)
+        // 2. Training dataset
+        // y = 2*x1 - 3*x2 + 1
+        const X = new Tensor(
+            new Float32Array([
+                0, 0,
+                1, 0,
+                0, 1,
+                1, 1,
+                2, 1,
+                1, 2,
+                2, 2,
+                3, 1
+            ]),
+            [8, 2]
+        );
 
-        // Save net1's parameters
-        const state = net1.stateDict()
+        const Y = new Tensor(
+            new Float32Array([
+                1, 3, -2, 0, 2, -3, -1, 4
+            ]),
+            [8, 1]
+        );
 
-        // Load them into net2
-        net2.loadStateDict(state)
+        // 3. Initialize training components
+        const model = new Net();
+        const criterion = new MSELoss();
 
-        // Verify that parameters match
-        for (const [name, param] of net1.namedParameters()) {
-            const other = new Map(net2.namedParameters()).get(name)
+        const optimizer = new SGD(model.parameters(), {
+            lr: 0.01,
+            momentum: 0.3,
+            dampening: 0.2
+        });
 
-            console.log(
-                name,
-                param.data.every((value, i) => value === other.data[i])
-            )
+        log("Parameters:", model.parameters().length);
+
+        // 4. Training loop
+        const epochs = 1000;
+
+        for (let epoch = 0; epoch < 1000; epoch++) {
+            optimizer.zeroGrad();
+
+            const prediction = model.call(X);
+            const loss = criterion.call(prediction, Y);
+
+            if (!prediction.data.every(Number.isFinite)) {
+                console.error("Invalid prediction at epoch:", epoch);
+                console.log("Predictions:", prediction.data);
+                break;
+            }
+
+            if (!loss.data.every(Number.isFinite)) {
+                console.error("Invalid loss at epoch:", epoch);
+                console.log("Loss:", loss.data);
+                break;
+            }
+
+            loss.backward();
+
+            optimizer.step();
+
+            // Check parameters AFTER updating them
+            for (const [i, param] of model.parameters().entries()) {
+                if (!param.data.every(Number.isFinite)) {
+                    console.error("Invalid parameter after SGD:", i);
+                    console.log("Values:", param.data);
+                    break;
+                }
+            }
+
+            if (epoch % 10 === 0) {
+                console.log(epoch, loss.data[0]);
+            }
         }
 
+        // 5. Verify predictions
+        const prediction = model.call(X);
 
+        log("\nExpected:", Array.from(Y.data).join(", "));
+        log(
+            "Predicted:",
+            Array.from(prediction.data)
+                .map(v => v.toFixed(3))
+                .join(", ")
+        );
+
+        // 6. Test state dictionary
+        const state = model.stateDict();
+
+        const restoredModel = new Net();
+        restoredModel.loadStateDict(state);
+
+        const restoredPrediction = restoredModel.call(X);
+
+        const passed = prediction.data.every(
+            (value, i) =>
+                Math.abs(value - restoredPrediction.data[i]) < 1e-6
+        );
+
+        log(
+            "\nState dict test:",
+            passed ? "PASS" : "FAIL"
+        );
     </script>
 </body>
 
