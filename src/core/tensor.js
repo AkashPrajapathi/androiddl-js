@@ -414,7 +414,7 @@ export class Tensor {
                 throw new Error("grad must be tensor of same shape")
             }
 
-            for (let i = 0; i < this.shape; i++) {
+            for (let i = 0; i < this.shape.length; i++) {
                 if (grad.shape[i] !== this.shape[i]) {
                     throw new Error(`grad of shape ${grad.shape.toString()} is not valid for tensor of shape ${this.shape.toString()}`)
                 }
