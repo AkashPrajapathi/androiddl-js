@@ -10,3 +10,4 @@ export { Softmax } from "./src/nn/softmax.js";
 export { SGD } from "./src/optim/sgd.js"
 export { MSELoss } from "./src/loss/mse-loss.js"
 export { CrossEntropyLoss } from "./src/loss/cross-entropy-loss.js"
+export { Categorical } from "./src/distribution/categorical.js"
