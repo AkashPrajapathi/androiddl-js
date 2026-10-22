@@ -252,6 +252,7 @@ export class Tensor {
 
         return op.apply(this, other)
     }
+    
     sub(other) {
         if (typeof other === "number") {
             other = new Tensor([other], []);

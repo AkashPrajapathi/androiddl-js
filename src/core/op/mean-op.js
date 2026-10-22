@@ -8,10 +8,15 @@ import { ReductionIterator } from "../iterator/reduction-iterator.js";
 import { MeanBackward } from "../autograd/mean-backward.js";
 
 export class MeanOp {
-    apply(tensor, axes, keepdim = false) {
+    apply(tensor, axes = undefined, keepdim = false) {
         // Validate tensor.
         if (!(tensor instanceof Tensor)) {
             throw new Error("tensor must be an object of Tensor");
+        }
+
+        // Undefined axes means reduce all dimensions.
+        if (axes === undefined) {
+            axes = tensor.shape.map((_, axis) => axis);
         }
 
         // Validate axes.
