@@ -3,6 +3,7 @@ import { GradFn } from "./grad-fn.js"
 
 export class SoftmaxBackward extends GradFn {
     constructor(inputs, output, dim) {
+        super(inputs)
         this.inputs = inputs
         this.output = output
         this.dim = dim
