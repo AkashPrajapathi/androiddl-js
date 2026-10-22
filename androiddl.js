@@ -1,22 +1,12 @@
-import { Tensor } from "./src/core/tensor.js";
-import { Linear } from "./src/nn/linear.js";
-import { Module } from "./src/nn/module.js";
-import { Sequential } from "./src/nn/sequential.js";
-import { ReLU } from "./src/nn/relu.js";
-import { Sigmoid } from "./src/nn/sigmoid.js";
-import { Tanh } from "./src/nn/tanh.js";
-import { Parameter } from "./src/nn/parameter.js";
-import { Softmax } from "./src/nn/softmax.js";
-
-
-export {
-    Tensor,
-    Linear,
-    Parameter,
-    Module,
-    Sequential,
-    ReLU,
-    Tanh,
-    Sigmoid,
-    Softmax
-}
+export { Tensor } from "./src/core/tensor.js";
+export { Linear } from "./src/nn/linear.js";
+export { Module } from "./src/nn/module.js";
+export { Sequential } from "./src/nn/sequential.js";
+export { ReLU } from "./src/nn/relu.js";
+export { Sigmoid } from "./src/nn/sigmoid.js";
+export { Tanh } from "./src/nn/tanh.js";
+export { Parameter } from "./src/nn/parameter.js";
+export { Softmax } from "./src/nn/softmax.js";
+export { SGD } from "./src/optim/sgd.js"
+export { MSELoss } from "./src/loss/mse-loss.js"
+export { CrossEntropyLoss } from "./src/loss/cross-entropy-loss.js"
