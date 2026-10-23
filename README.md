@@ -27,6 +27,22 @@ You can download the prebuilt library files from the release assets or build the
 
 For npm installation, see the [Installation](#installation) section below.
 
+## 🐍 Snake AI — Live Demo
+
+See **AndroidDL.js in action** by running a trained Snake AI model directly in your browser.
+
+👉 **[Play Snake AI Demo](https://akashprajapathi.github.io/androiddl-js/snake-inference.html)**
+
+The demo loads trained model weights and runs inference using AndroidDL.js—no Python or server-side inference required.
+
+### Features
+- 🧠 Trained neural network inference in the browser
+- ⚡ JavaScript-powered model execution
+- 🎮 Play Snake with an AI agent
+- 📦 Powered by AndroidDL.js
+
+
+
 ## Features
 
 - **Tensor computation:** Multidimensional tensors, shape and stride management, broadcasting, and matrix multiplication.
