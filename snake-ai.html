@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SnakeAI Training</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            background: #111827;
+            color: white;
+            font-family: system-ui, sans-serif;
+        }
+
+        canvas {
+            display: block;
+            width: min(95vw, 600px);
+            height: auto;
+            border: 2px solid #374151;
+            border-radius: 8px;
+        }
+
+        button {
+            padding: 10px 24px;
+            border: 0;
+            border-radius: 6px;
+            background: #4dba36;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        #status {
+            text-align: center;
+            white-space: pre-line;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="game"></canvas>
+
+    <div class="controls">
+        <button id="start">Start Training</button>
+        <button id="load">Load Weights to Resume</button>
+    </div>
+
+    <div id="status">Ready</div>
+
+    <script type="module">
+        import { Tensor, SGD, Categorical } from "./androiddl.js";
+        import { ActorCritic } from "./actor-critic.js";
+        import { SnakeEnv } from "./snake-env.js";
+
+        const canvas = document.getElementById("game");
+        const startButton = document.getElementById("start");
+        const loadButton = document.getElementById("load");
+        const status = document.getElementById("status");
+
+
+        const env = new SnakeEnv({
+            mode: "ai",
+            canvas,
+            gridSize: 20,
+            cellSize: 20,
+            renderOnStep: false
+        });
+
+        const model = new ActorCritic();
+
+        const optimizer = new SGD(model.parameters(), { lr: 0.01, momentum: 0.9, dampening: 0 });
+
+        const GAMMA = 0.99;
+        const MAX_EPISODES = 1000;
+        const MAX_STEPS = 1000;
+        const LOG_INTERVAL = 10;
+        const WINDOW_SIZE = 100;
+        const YIELD_EVERY_STEPS = 8;
+
+        let training = false;
+        let stopRequested = false;
+        let animationId = null;
+
+        // Rendering runs independently of simulation steps.
+        function renderFrame() {
+            env.render();
+            animationId = requestAnimationFrame(renderFrame);
+        }
+
+        function startRendering() {
+            if (animationId === null) {
+                animationId = requestAnimationFrame(renderFrame);
+            }
+        }
+
+        // Give the browser a chance to process rendering and UI events.
+        function yieldToBrowser() {
+            return new Promise(resolve => setTimeout(resolve, 0));
+        }
+
+        function stateTensor(state) {
+            return new Tensor(state, [1, state.length]);
+        }
+
+        function saveWeights(model, filename = "snake-ai-weights.json") {
+            const state = model.stateDict();
+
+            const blob = new Blob(
+                [JSON.stringify(state)],
+                { type: "application/json" }
+            );
+
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+
+            link.href = url;
+            link.download = filename;
+            link.click();
+
+            URL.revokeObjectURL(url);
+        }
+
+        async function loadWeights(model, file) {
+            const state = JSON.parse(await file.text());
+
+            // Copies saved values into the existing model parameters.
+            model.loadStateDict(state);
+        }
+
+        async function trainEpisode() {
+            let state = env.reset();
+
+            const logProbs = [];
+            const values = [];
+            const rewards = [];
+
+            let totalReward = 0;
+            let steps = 0;
+
+            // Collect one episode of experience.
+            while (steps < MAX_STEPS) {
+                const { logits, value } = model.call(
+                    stateTensor(state)
+                );
+
+                const distribution = new Categorical(logits);
+                const actionTensor = distribution.sample();
+                const action = Array.from(actionTensor)[0];
+
+                logProbs.push(
+                    distribution.logProb(actionTensor)
+                );
+
+                values.push(value);
+
+                const result = env.step(action);
+
+                rewards.push(result.reward);
+                totalReward += result.reward;
+                steps++;
+
+                state = result.state;
+
+                if (result.terminated || result.truncated) {
+                    break;
+                }
+
+                // Avoid monopolizing the main thread for too long.
+                if (steps % YIELD_EVERY_STEPS === 0) {
+                    await yieldToBrowser();
+                }
+            }
+
+            // Calculate discounted returns.
+            const returns = new Array(rewards.length);
+            let discountedReturn = 0;
+
+            for (let t = rewards.length - 1; t >= 0; t--) {
+                discountedReturn =
+                    rewards[t] + GAMMA * discountedReturn;
+
+                returns[t] = discountedReturn;
+            }
+
+            // Compute actor and critic losses.
+            if (rewards.length > 0) {
+                optimizer.zeroGrad();
+
+                let actorLoss = null;
+                let criticLoss = null;
+
+                for (let t = 0; t < rewards.length; t++) {
+                    const target = new Tensor(
+                        [returns[t]],
+                        [1, 1]
+                    );
+
+                    // Advantage = return - predicted value.
+                    const advantage = target
+                        .sub(values[t])
+                        .detach();
+
+                    // Actor loss: -log(probability) * advantage.
+                    const stepActorLoss = logProbs[t]
+                        .mul(advantage)
+                        .sum()
+                        .mul(-1);
+
+                    // Critic loss: 0.5 * squared prediction error.
+                    const error = target.sub(values[t]);
+
+                    const stepCriticLoss = error
+                        .mul(error)
+                        .mean()
+                        .mul(0.5);
+
+                    actorLoss = actorLoss === null
+                        ? stepActorLoss
+                        : actorLoss.add(stepActorLoss);
+
+                    criticLoss = criticLoss === null
+                        ? stepCriticLoss
+                        : criticLoss.add(stepCriticLoss);
+
+                    // Loss construction can take time for long episodes.
+                    if ((t + 1) % 64 === 0) {
+                        await yieldToBrowser();
+                    }
+                }
+
+                // Average losses across the episode.
+                const count = rewards.length;
+
+                const loss = actorLoss
+                    .div(count)
+                    .add(criticLoss.div(count));
+
+                // Backpropagate and update model parameters.
+                loss.backward();
+                optimizer.step();
+            }
+
+            return {
+                score: env.score,
+                totalReward,
+                steps
+            };
+        }
+
+        const recentScores = [];
+        const recentRewards = [];
+
+        async function train() {
+            // A second click requests a stop after the current episode.
+            if (training) {
+                stopRequested = true;
+                startButton.disabled = true;
+
+                status.textContent =
+                    "Stopping after the current episode...";
+
+                return;
+            }
+
+            training = true;
+            stopRequested = false;
+
+            startButton.textContent = "Stop Training";
+            status.textContent = "Training started...";
+
+            try {
+                for (
+                    let episode = 1;
+                    episode <= MAX_EPISODES;
+                    episode++
+                ) {
+                    if (stopRequested) {
+                        break;
+                    }
+
+                    const result = await trainEpisode();
+
+                    recentScores.push(result.score);
+                    recentRewards.push(result.totalReward);
+
+                    if (recentScores.length > WINDOW_SIZE) {
+                        recentScores.shift();
+                        recentRewards.shift();
+                    }
+
+                    if (
+                        episode % LOG_INTERVAL === 0 ||
+                        episode === 1
+                    ) {
+                        const avgScore =
+                            recentScores.reduce(
+                                (a, b) => a + b,
+                                0
+                            ) / recentScores.length;
+
+                        const avgReward =
+                            recentRewards.reduce(
+                                (a, b) => a + b,
+                                0
+                            ) / recentRewards.length;
+
+                        const message =
+                            `Episode: ${episode}/${MAX_EPISODES}\n` +
+                            `Score: ${result.score}\n` +
+                            `Average score (${recentScores.length}): ${avgScore.toFixed(2)}\n` +
+                            `Average reward: ${avgReward.toFixed(3)}\n` +
+                            `Steps: ${result.steps}`;
+
+                        console.log(message.replaceAll("\n", " | "));
+                        status.textContent = message;
+                    }
+
+                    await yieldToBrowser();
+                }
+
+                status.textContent += stopRequested
+                    ? "\nTraining stopped."
+                    : "\nTraining finished.";
+
+                saveWeights(model)
+
+            } catch (error) {
+                console.error(error);
+
+                status.textContent =
+                    `Training failed:\n${error?.stack ?? error}`;
+
+            } finally {
+                training = false;
+                stopRequested = false;
+
+                startButton.disabled = false;
+                startButton.textContent = "Train Again";
+            }
+        }
+
+        startButton.addEventListener("click", train);
+
+        loadButton.addEventListener("click", () => {
+            if (training) return;
+
+            const picker = document.createElement("input");
+            picker.type = "file";
+            picker.accept = ".json,application/json";
+
+            picker.onchange = async () => {
+                const file = picker.files?.[0];
+                if (!file) return;
+
+                loadButton.disabled = true;
+
+                try {
+                    await loadWeights(model, file);
+
+                    status.textContent =
+                        "Weights loaded successfully!\nReady to resume training.";
+
+                    startButton.textContent = "Resume Training";
+                } catch (error) {
+                    console.error(error);
+                    status.textContent =
+                        `Failed to load weights:\n${error.message}`;
+                } finally {
+                    loadButton.disabled = false;
+                }
+            };
+
+            picker.click();
+        });
+
+        // Keep the game canvas rendering while training runs.
+        startRendering();
+
+    </script>
+</body>
+
+</html>

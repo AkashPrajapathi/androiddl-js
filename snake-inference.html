@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SnakeAI Inference</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            padding: 24px;
+            font-family: Arial, sans-serif;
+            background: #111827;
+            color: #f9fafb;
+        }
+
+        h2 {
+            margin: 0;
+            text-align: center;
+        }
+
+        #game {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            border: 2px solid #374151;
+            border-radius: 8px;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            background: #22c55e;
+            color: #052e16;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover:not(:disabled) {
+            background: #4ade80;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #restart {
+            background: #60a5fa;
+            color: #172554;
+        }
+
+        #restart:hover:not(:disabled) {
+            background: #93c5fd;
+        }
+
+        #status {
+            text-align: center;
+            min-height: 20px;
+        }
+
+        [hidden] {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>SnakeAI — Inference</h2>
+
+    <canvas id="game"></canvas>
+
+    <div class="controls">
+        <button id="start">Load Weights & Play</button>
+        <button id="restart" hidden>Restart Game</button>
+    </div>
+
+    <div id="status">Ready</div>
+
+    <script type="module">
+        import { Tensor, Categorical } from "./androiddl.js";
+        import { ActorCritic } from "./actor-critic.js";
+        import { SnakeEnv } from "./snake-env.js";
+
+        const canvas = document.getElementById("game");
+        const startButton = document.getElementById("start");
+        const restartButton = document.getElementById("restart");
+        const status = document.getElementById("status");
+
+        const model = new ActorCritic();
+
+        const env = new SnakeEnv({
+            mode: "ai",
+            canvas,
+            gridSize: 20,
+            cellSize: 20,
+            renderOnStep: false
+        });
+
+        let weightsLoaded = false;
+        let isPlaying = false;
+
+        function stateTensor(state) {
+            return new Tensor(state, [1, state.length]);
+        }
+
+        async function loadWeights(model, file) {
+            const state = JSON.parse(await file.text());
+            model.loadStateDict(state);
+        }
+
+        function render() {
+            env.render();
+            requestAnimationFrame(render);
+        }
+
+        render();
+
+        async function play() {
+            if (!weightsLoaded || isPlaying) return;
+
+            isPlaying = true;
+            startButton.disabled = true;
+            restartButton.hidden = true;
+
+            try {
+                let state = env.reset();
+                status.textContent = "Playing...";
+
+                while (true) {
+                    const { logits } = model.call(stateTensor(state));
+
+                    // Greedy inference: choose the most likely action.
+                    const probabilities = new Categorical(logits).probs;
+                    const values = Array.from(probabilities);
+
+                    let action = 0;
+
+                    for (let i = 1; i < values.length; i++) {
+                        if (values[i] > values[action]) {
+                            action = i;
+                        }
+                    }
+
+                    const result = env.step(action);
+                    state = result.state;
+
+                    if (result.terminated || result.truncated) {
+                        status.textContent = `Game over! Score: ${env.score}`;
+                        restartButton.hidden = false;
+                        break;
+                    }
+
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            } catch (error) {
+                console.error(error);
+                status.textContent = `Error: ${error.message}`;
+            } finally {
+                isPlaying = false;
+                startButton.disabled = weightsLoaded;
+            }
+        }
+
+        startButton.addEventListener("click", () => {
+            const picker = document.createElement("input");
+            picker.type = "file";
+            picker.accept = ".json,application/json";
+
+            picker.onchange = async () => {
+                const file = picker.files?.[0];
+                if (!file) return;
+
+                startButton.disabled = true;
+
+                try {
+                    await loadWeights(model, file);
+                    weightsLoaded = true;
+                    await play();
+                } catch (error) {
+                    console.error(error);
+                    status.textContent = `Error: ${error.message}`;
+                    startButton.disabled = false;
+                }
+            };
+
+            picker.click();
+        });
+
+        restartButton.addEventListener("click", () => {
+            play();
+        });
+    </script>
+</body>
+
+</html>
