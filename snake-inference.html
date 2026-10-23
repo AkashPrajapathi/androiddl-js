@@ -91,7 +91,7 @@
     <canvas id="game"></canvas>
 
     <div class="controls">
-        <button id="start">Load Weights & Play</button>
+        <button id="start">Load Model & Play</button>
         <button id="restart" hidden>Restart Game</button>
     </div>
 
@@ -124,8 +124,14 @@
             return new Tensor(state, [1, state.length]);
         }
 
-        async function loadWeights(model, file) {
-            const state = JSON.parse(await file.text());
+        async function loadWeights(model) {
+            const response = await fetch("./snake-ai-weights.json");
+
+            if (!response.ok) {
+                throw new Error(`Could not load weights: ${response.status}`);
+            }
+
+            const state = await response.json();
             model.loadStateDict(state);
         }
 
@@ -182,29 +188,19 @@
             }
         }
 
-        startButton.addEventListener("click", () => {
-            const picker = document.createElement("input");
-            picker.type = "file";
-            picker.accept = ".json,application/json";
+        startButton.addEventListener("click", async () => {
+            startButton.disabled = true;
+            status.textContent = "Loading trained model...";
 
-            picker.onchange = async () => {
-                const file = picker.files?.[0];
-                if (!file) return;
-
-                startButton.disabled = true;
-
-                try {
-                    await loadWeights(model, file);
-                    weightsLoaded = true;
-                    await play();
-                } catch (error) {
-                    console.error(error);
-                    status.textContent = `Error: ${error.message}`;
-                    startButton.disabled = false;
-                }
-            };
-
-            picker.click();
+            try {
+                await loadWeights(model);
+                weightsLoaded = true;
+                await play();
+            } catch (error) {
+                console.error(error);
+                status.textContent = `Error: ${error.message}`;
+                startButton.disabled = false;
+            }
         });
 
         restartButton.addEventListener("click", () => {

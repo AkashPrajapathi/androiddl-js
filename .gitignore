@@ -1,1 +1,4 @@
 test.ipynb
+.npmrc
+dist/
+node_modules/

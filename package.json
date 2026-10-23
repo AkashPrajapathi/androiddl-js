@@ -1,0 +1,27 @@
+{
+  "name": "@AkashPrajapathi/androiddl-js",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/androiddl.umd.cjs",
+  "module": "./dist/androiddl.js",
+  "exports": {
+    ".": {
+      "import": "./dist/androiddl.js",
+      "require": "./dist/androiddl.umd.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "vite": "^8.3.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AkashPrajapathi/androiddl-js.git"
+  }
+}
