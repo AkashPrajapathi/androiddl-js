@@ -1,4 +1,4 @@
-import { inversePermuatation } from "../util.js";
+import { inversePermutation } from "../util.js";
 import { GradFn } from "./grad-fn.js";
 
 export class PermuteBackward extends GradFn {
@@ -9,7 +9,7 @@ export class PermuteBackward extends GradFn {
     }
 
     backward(outputGrad) {
-        const inverse = inversePermuatation(this.dims)
+        const inverse = inversePermutation(this.dims)
 
         const grad = outputGrad.permute(...inverse)
 

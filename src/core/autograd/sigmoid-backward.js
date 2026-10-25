@@ -9,7 +9,7 @@ export class SigmoidBackward extends GradFn {
     }
 
     backward(outputGrad) {
-        const ones = onesLike(this.output.shape)
+        const ones = onesLike(this.output)
 
         const grad = ones.sub(this.output).mul(this.output).mul(outputGrad)
 

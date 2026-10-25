@@ -361,7 +361,7 @@ export function expandReducedAxes(input, outputShape) {
     return new Tensor(result, [...outputShape])
 }
 
-export function inversePermuatation(dimensions) {
+export function inversePermutation(dimensions) {
     if (!Array.isArray()) {
         throw new Error("dimensions must be 1D array")
     }
