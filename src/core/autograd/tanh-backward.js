@@ -9,7 +9,7 @@ export class TanhBackward extends GradFn {
     }
 
     backward(outputGrad) {
-        const ones = onesLike(this.output.shape)
+        const ones = onesLike(this.output)
 
         const tanhSqr = this.output.mul(this.output)
         const grad = ones.sub(tanhSqr).mul(outputGrad)
