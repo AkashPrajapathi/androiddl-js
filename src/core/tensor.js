@@ -41,28 +41,29 @@ export class Tensor {
     }
 
     #validateShape(data, shape) {
-
         if (!Array.isArray(shape)) {
-            throw new Error("Shape must be 1D array")
+            throw new Error("Shape must be 1D array");
         }
 
         for (let v of shape) {
-            if (!Number.isInteger(v) || v <= 0) {
-                throw new Error("Shape must contain positive integers")
+            if (!Number.isInteger(v) || v < 0) {
+                throw new Error(
+                    "Shape must contain non-negative integers"
+                );
             }
         }
 
-        const currentShape = []
+        const currentShape = [];
+        normalizeShape(data, currentShape);
 
-        normalizeShape(data, currentShape)
-
-        const oldSize = currentShape.reduce((acc, v) => acc * v, 1)
-        const newSize = shape.reduce((acc, v) => acc * v, 1)
+        const oldSize = currentShape.reduce((acc, v) => acc * v, 1);
+        const newSize = shape.reduce((acc, v) => acc * v, 1);
 
         if (oldSize !== newSize) {
-            throw new Error(`Invalid reshape: ${oldSize} cannot become ${newSize}`)
+            throw new Error(
+                `Invalid reshape: ${oldSize} cannot become ${newSize}`
+            );
         }
-
     }
 
     #calculateStrides(shape) {

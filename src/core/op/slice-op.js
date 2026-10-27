@@ -1,13 +1,14 @@
 import { Tensor } from "../tensor.js";
-import { normalizeShape, normalizeSpec, parseSlice } from "../util.js";
+import { normalizeSpec, parseSlice } from "../util.js";
+import { SliceBackward } from "../autograd/slice-backward.js";
 
 export class SliceOp {
     apply(a, ...specs) {
         if (!(a instanceof Tensor)) {
-            throw new Error("a must be tensor")
+            throw new Error("a must be tensor");
         }
 
-        const rank = a.shape.length
+        const rank = a.shape.length;
 
         if (specs.length === 0) {
             specs = Array(rank).fill(":");
@@ -19,26 +20,36 @@ export class SliceOp {
             );
         }
 
-        if (specs.length === 0) {
-            specs = Array(rank).fill(":")
-        }
-
-        const shape = []
-        const strides = []
-        let offset = a.offset
+        const shape = [];
+        const strides = [];
+        const starts = [];
+        const steps = [];
+        let offset = a.offset;
 
         for (let d = 0; d < rank; d++) {
-            const { start, stop, step } = parseSlice(specs[d])
-            const normSlice = normalizeSpec(start, stop, step, a.shape[d])
+            const { start, stop, step } = parseSlice(specs[d]);
+            const norm = normalizeSpec(start, stop, step, a.shape[d]);
 
-            shape.push(normSlice.length)
-            strides.push(a.strides[d] * normSlice.step)
+            shape.push(norm.length);
+            strides.push(a.strides[d] * norm.step);
+            starts.push(norm.start);
+            steps.push(norm.step);
 
-            offset += normSlice.start * a.strides[d]
+            offset += norm.start * a.strides[d];
         }
 
-        const output = Tensor.view(a, shape, strides, offset)
+        const output = Tensor.view(a, shape, strides, offset);
 
-        return output
+        if (a.requiresGrad) {
+            output.requiresGrad = true;
+            output.gradFn = new SliceBackward(
+                [a],
+                [...a.shape],
+                starts,
+                steps
+            );
+        }
+
+        return output;
     }
 }

@@ -28,6 +28,10 @@ export class TensorIterator {
         return val
     }
 
+    getCoordinate() {
+        return this.coordinate.slice()
+    }
+
     #advance() {
         for (let dim = this.coordinate.length - 1; dim >= 0; dim--) {
 
