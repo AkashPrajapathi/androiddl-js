@@ -384,3 +384,68 @@ export function onesLike(tensor) {
 
     return new Tensor(data, [...tensor.shape])
 }
+
+export function parseSlice(spec) {
+    const parts = spec.split(":")
+
+    if (parts.length > 3) {
+        throw new Error(`Invalid slice: ${spec}`)
+    }
+
+    const parseBound = (value) => value === "" ? null : Number(value)
+
+    const start = parseBound(parts[0] ?? "")
+    const stop = parseBound(parts[1] ?? "")
+    const step = parts[2] === undefined || parts[2] === "" ? 1 : Number(parts[2])
+
+    if ((start !== null && !Number.isInteger(start)) || (stop !== null && !Number.isInteger(stop)) || !Number.isInteger(step)) {
+        throw new Error(`Slice values must be integers: ${spec}`)
+    }
+
+    if (step === 0) {
+        throw new Error(`Slice step cannot be zero`)
+    }
+
+    return { start, stop, step }
+}
+
+export function normalizeSpec(start, stop, step, size) {
+    const clamp = (value, min, max) =>
+        Math.max(min, Math.min(value, max));
+
+    if (step > 0) {
+        if (start === null) {
+            start = 0;
+        } else {
+            if (start < 0) start += size;
+            start = clamp(start, 0, size);
+        }
+
+        if (stop === null) {
+            stop = size;
+        } else {
+            if (stop < 0) stop += size;
+            stop = clamp(stop, 0, size);
+        }
+    } else {
+        if (start === null) {
+            start = size - 1;
+        } else {
+            if (start < 0) start += size;
+            start = clamp(start, -1, size - 1);
+        }
+
+        if (stop === null) {
+            stop = -1;
+        } else {
+            if (stop < 0) stop += size;
+            stop = clamp(stop, -1, size - 1);
+        }
+    }
+
+    const length = step > 0
+        ? Math.max(0, Math.ceil((stop - start) / step))
+        : Math.max(0, Math.ceil((start - stop) / -step));
+
+    return { start, stop, step, length };
+}

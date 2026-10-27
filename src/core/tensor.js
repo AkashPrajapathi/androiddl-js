@@ -16,27 +16,28 @@ import { ReLUOp } from "./op/relu-op.js"
 import { ExpOp } from "./op/exp-op.js"
 import { LogOp } from "./op/log-op.js"
 import { TanhOp } from "./op/tanh-op.js"
+import { SliceOp } from "./op/slice-op.js"
 
 export class Tensor {
-    constructor(data, shape, requiresGrad = false) {
+    constructor(data, shape, requiresGrad = false, view = null) {
         this.data = flattenToFloat32(data);
 
         if (shape === undefined) {
             shape = [];
             normalizeShape(data, shape);
-        } else {
+        } else if (view === null) {
             this.#validateShape(data, shape);
         }
 
         this.shape = shape;
-        this.strides = this.#calculateStrides(shape);
-        this.offset = 0;
+        this.strides = view ? view.strides : this.#calculateStrides(shape);
+        this.offset = view ? view.offset : 0;
 
-        this.numel = this.data.length
+        this.numel = shape.reduce((n, dim) => n * dim, 1);
 
-        this.requiresGrad = requiresGrad
-        this.grad = null
-        this.gradFn = null
+        this.requiresGrad = requiresGrad;
+        this.grad = null;
+        this.gradFn = null;
     }
 
     #validateShape(data, shape) {
@@ -252,7 +253,7 @@ export class Tensor {
 
         return op.apply(this, other)
     }
-    
+
     sub(other) {
         if (typeof other === "number") {
             other = new Tensor([other], []);
@@ -344,6 +345,11 @@ export class Tensor {
     tanh() {
         const op = new TanhOp()
         return op.apply(this)
+    }
+
+    slice(...specs) {
+        const op = new SliceOp()
+        return op.apply(this, ...specs)
     }
 
     #isContiguous(shape, strides) {
@@ -551,5 +557,14 @@ export class Tensor {
         builder += "]"
 
         return builder
+    }
+
+    static view(tensor, shape, strides, offset) {
+        return new Tensor(
+            tensor.data,
+            shape,
+            tensor.requiresGrad,
+            { strides, offset }
+        );
     }
 }

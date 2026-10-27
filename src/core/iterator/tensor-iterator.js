@@ -1,12 +1,12 @@
 export class TensorIterator {
     constructor(data, shape, strides, offset) {
-        this.data = data
-        this.shape = shape
-        this.strides = strides
-        this.offset = offset
+        this.data = data;
+        this.shape = shape;
+        this.strides = strides;
+        this.offset = offset;
 
-        this.finished = false
-        this.coordinate = new Int32Array(this.shape.length)
+        this.finished = shape.some(dim => dim === 0);
+        this.coordinate = new Int32Array(shape.length);
     }
 
     hasNext() {
