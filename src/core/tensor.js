@@ -17,6 +17,7 @@ import { ExpOp } from "./op/exp-op.js"
 import { LogOp } from "./op/log-op.js"
 import { TanhOp } from "./op/tanh-op.js"
 import { SliceOp } from "./op/slice-op.js"
+import { ConcatenateOp } from "./op/concatenate-op.js"
 
 export class Tensor {
     constructor(data, shape, requiresGrad = false, view = null) {
@@ -351,6 +352,11 @@ export class Tensor {
     slice(...specs) {
         const op = new SliceOp()
         return op.apply(this, ...specs)
+    }
+
+    static cat(tensors, dim) {
+        const op = new ConcatenateOp()
+        return op.apply(tensors, dim)
     }
 
     #isContiguous(shape, strides) {
