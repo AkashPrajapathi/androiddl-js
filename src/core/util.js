@@ -127,36 +127,45 @@ export function flattenToFloat32(data) {
 
 export function broadcastShape(aShape, bShape) {
     if (!Array.isArray(aShape) || !Array.isArray(bShape)) {
-        throw new Error("Shape must be 1D array")
+        throw new Error("Shape must be 1D array");
     }
 
-    let isAInt = aShape.every(v => Number.isInteger(v) && v > 0);
-    let isBInt = bShape.every(v => Number.isInteger(v) && v > 0);
+    const isAInt = aShape.every(
+        v => Number.isInteger(v) && v >= 0
+    );
+
+    const isBInt = bShape.every(
+        v => Number.isInteger(v) && v >= 0
+    );
 
     if (!isAInt || !isBInt) {
-        throw new Error("Shape must contain positive integer")
+        throw new Error("Shape must contain non-negative integers");
     }
 
-    const resultRank = Math.max(aShape.length, bShape.length)
-
-    const broadcastedShape = new Array(resultRank)
+    const resultRank = Math.max(aShape.length, bShape.length);
+    const broadcastedShape = new Array(resultRank);
 
     for (let i = 0; i < resultRank; i++) {
-        const aIdx = aShape.length - 1 - (resultRank - 1 - i)
-        const bIdx = bShape.length - 1 - (resultRank - 1 - i)
+        const aIdx = aShape.length - 1 - (resultRank - 1 - i);
+        const bIdx = bShape.length - 1 - (resultRank - 1 - i);
 
-        const aDim = aIdx >= 0 ? aShape[aIdx] : 1
-        const bDim = bIdx >= 0 ? bShape[bIdx] : 1
+        const aDim = aIdx >= 0 ? aShape[aIdx] : 1;
+        const bDim = bIdx >= 0 ? bShape[bIdx] : 1;
 
-        if (aDim === bDim || aDim === 1 || bDim === 1) {
-            broadcastedShape[i] = Math.max(aDim, bDim)
+        if (aDim === bDim) {
+            broadcastedShape[i] = aDim;
+        } else if (aDim === 1) {
+            broadcastedShape[i] = bDim;
+        } else if (bDim === 1) {
+            broadcastedShape[i] = aDim;
         } else {
-            throw new Error(`Cannot broadcast shape ${aShape.toString()} and ${bShape.toString()}`)
+            throw new Error(
+                `Cannot broadcast shape ${aShape} and ${bShape}`
+            );
         }
     }
 
-    return broadcastedShape
-
+    return broadcastedShape;
 }
 
 export function broadcastStrides(inputShape, inputStrides, outputShape) {
@@ -362,25 +371,92 @@ export function expandReducedAxes(input, outputShape) {
 }
 
 export function inversePermutation(dimensions) {
-    if (!Array.isArray()) {
-        throw new Error("dimensions must be 1D array")
+    if (!Array.isArray(dimensions)) {
+        throw new Error("dimensions must be 1D array");
     }
 
-    if (!dimensions.every(v => Number.isInteger(v) && v >= 0)) {
-        throw new Error("dimensions must have valid axes")
+    if (!dimensions.every(
+        v => Number.isInteger(v) && v >= 0
+    )) {
+        throw new Error("dimensions must have valid axes");
     }
 
-    const inverse = new Array(dimensions.length)
+    const inverse = new Array(dimensions.length);
 
     for (const i in dimensions) {
-        inverse[dimensions[i]] = i
+        inverse[dimensions[i]] = Number(i);
     }
 
-    return inverse
+    return inverse;
 }
 
 export function onesLike(tensor) {
     const data = new Float32Array(tensor.numel).fill(1)
 
     return new Tensor(data, [...tensor.shape])
+}
+
+export function parseSlice(spec) {
+    const parts = spec.split(":")
+
+    if (parts.length > 3) {
+        throw new Error(`Invalid slice: ${spec}`)
+    }
+
+    const parseBound = (value) => value === "" ? null : Number(value)
+
+    const start = parseBound(parts[0] ?? "")
+    const stop = parseBound(parts[1] ?? "")
+    const step = parts[2] === undefined || parts[2] === "" ? 1 : Number(parts[2])
+
+    if ((start !== null && !Number.isInteger(start)) || (stop !== null && !Number.isInteger(stop)) || !Number.isInteger(step)) {
+        throw new Error(`Slice values must be integers: ${spec}`)
+    }
+
+    if (step === 0) {
+        throw new Error(`Slice step cannot be zero`)
+    }
+
+    return { start, stop, step }
+}
+
+export function normalizeSpec(start, stop, step, size) {
+    const clamp = (value, min, max) =>
+        Math.max(min, Math.min(value, max));
+
+    if (step > 0) {
+        if (start === null) {
+            start = 0;
+        } else {
+            if (start < 0) start += size;
+            start = clamp(start, 0, size);
+        }
+
+        if (stop === null) {
+            stop = size;
+        } else {
+            if (stop < 0) stop += size;
+            stop = clamp(stop, 0, size);
+        }
+    } else {
+        if (start === null) {
+            start = size - 1;
+        } else {
+            if (start < 0) start += size;
+            start = clamp(start, -1, size - 1);
+        }
+
+        if (stop === null) {
+            stop = -1;
+        } else {
+            if (stop < 0) stop += size;
+            stop = clamp(stop, -1, size - 1);
+        }
+    }
+
+    const length = step > 0
+        ? Math.max(0, Math.ceil((stop - start) / step))
+        : Math.max(0, Math.ceil((start - stop) / -step));
+
+    return { start, stop, step, length };
 }

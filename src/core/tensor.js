@@ -16,52 +16,58 @@ import { ReLUOp } from "./op/relu-op.js"
 import { ExpOp } from "./op/exp-op.js"
 import { LogOp } from "./op/log-op.js"
 import { TanhOp } from "./op/tanh-op.js"
+import { SliceOp } from "./op/slice-op.js"
+import { ConcatenateOp } from "./op/concatenate-op.js"
+import { UnsqueezeOp } from "./op/unsqueeze-op.js"
+import { StackOp } from "./op/stack-op.js"
+import { SqueezeOp } from "./op/squeeze-op.js"
 
 export class Tensor {
-    constructor(data, shape, requiresGrad = false) {
+    constructor(data, shape, requiresGrad = false, view = null) {
         this.data = flattenToFloat32(data);
 
         if (shape === undefined) {
             shape = [];
             normalizeShape(data, shape);
-        } else {
+        } else if (view === null) {
             this.#validateShape(data, shape);
         }
 
         this.shape = shape;
-        this.strides = this.#calculateStrides(shape);
-        this.offset = 0;
+        this.strides = view ? view.strides : this.#calculateStrides(shape);
+        this.offset = view ? view.offset : 0;
 
-        this.numel = this.data.length
+        this.numel = shape.reduce((n, dim) => n * dim, 1);
 
-        this.requiresGrad = requiresGrad
-        this.grad = null
-        this.gradFn = null
+        this.requiresGrad = requiresGrad;
+        this.grad = null;
+        this.gradFn = null;
     }
 
     #validateShape(data, shape) {
-
         if (!Array.isArray(shape)) {
-            throw new Error("Shape must be 1D array")
+            throw new Error("Shape must be 1D array");
         }
 
         for (let v of shape) {
-            if (!Number.isInteger(v) || v <= 0) {
-                throw new Error("Shape must contain positive integers")
+            if (!Number.isInteger(v) || v < 0) {
+                throw new Error(
+                    "Shape must contain non-negative integers"
+                );
             }
         }
 
-        const currentShape = []
+        const currentShape = [];
+        normalizeShape(data, currentShape);
 
-        normalizeShape(data, currentShape)
-
-        const oldSize = currentShape.reduce((acc, v) => acc * v, 1)
-        const newSize = shape.reduce((acc, v) => acc * v, 1)
+        const oldSize = currentShape.reduce((acc, v) => acc * v, 1);
+        const newSize = shape.reduce((acc, v) => acc * v, 1);
 
         if (oldSize !== newSize) {
-            throw new Error(`Invalid reshape: ${oldSize} cannot become ${newSize}`)
+            throw new Error(
+                `Invalid reshape: ${oldSize} cannot become ${newSize}`
+            );
         }
-
     }
 
     #calculateStrides(shape) {
@@ -128,9 +134,12 @@ export class Tensor {
             newStrides[i] = this.strides[indices[i]]
         }
 
-        const x = new Tensor(this.data, newShape)
-        x.strides = newStrides
-        x.offset = this.offset
+        const x = Tensor.view(
+            this,
+            newShape,
+            newStrides,
+            this.offset
+        );
 
         if (this.requiresGrad) {
             x.requiresGrad = true
@@ -142,29 +151,46 @@ export class Tensor {
 
 
     transpose(dim0, dim1) {
-        if (dim0 >= dim1) {
-            throw new Error("dim0 can not greater or eqault to dim1")
+        const rank = this.shape.length;
+
+        if (!Number.isInteger(dim0) || !Number.isInteger(dim1)) {
+            throw new Error("Dimensions must be integers");
         }
 
-        const indices = new Array(this.shape.length)
-        for (let i = 0; i < this.shape.length; i++) {
-            indices[i] = i
+        if (dim0 < 0) dim0 += rank;
+        if (dim1 < 0) dim1 += rank;
+
+        if (
+            dim0 < 0 || dim0 >= rank ||
+            dim1 < 0 || dim1 >= rank
+        ) {
+            throw new Error("Dimension out of range");
         }
 
-        let a = indices[dim0]
-        let b = indices[dim1]
+        if (dim0 === dim1) {
+            return this;
+        }
 
-        indices[dim0] = b;
-        indices[dim1] = a;
+        const indices = Array.from(
+            { length: rank },
+            (_, i) => i
+        );
 
-        const output = this.permute(...indices)
+        [indices[dim0], indices[dim1]] =
+            [indices[dim1], indices[dim0]];
+
+        const output = this.permute(...indices);
 
         if (this.requiresGrad) {
-            output.requiresGrad = true
-            output.gradFn = new TransposeBackward([this], dim0, dim1)
+            output.requiresGrad = true;
+            output.gradFn = new TransposeBackward(
+                [this],
+                dim0,
+                dim1
+            );
         }
 
-        return output
+        return output;
     }
 
 
@@ -191,7 +217,7 @@ export class Tensor {
 
         let x;
 
-        if (this.#isContiguous(this.shape, this.strides)) {
+        if (this.isContiguous()) {
             x = new Tensor(this.data, shape);
             x.strides = this.#calculateStrides(shape);
             x.offset = this.offset;
@@ -252,7 +278,7 @@ export class Tensor {
 
         return op.apply(this, other)
     }
-    
+
     sub(other) {
         if (typeof other === "number") {
             other = new Tensor([other], []);
@@ -346,7 +372,32 @@ export class Tensor {
         return op.apply(this)
     }
 
-    #isContiguous(shape, strides) {
+    slice(...specs) {
+        const op = new SliceOp()
+        return op.apply(this, ...specs)
+    }
+
+    unsqueeze(dim) {
+        const op = new UnsqueezeOp()
+        return op.apply(this, dim)
+    }
+
+    squeeze(dim = null) {
+        return new SqueezeOp().apply(this, dim);
+    }
+
+    static cat(tensors, dim) {
+        const op = new ConcatenateOp()
+        return op.apply(tensors, dim)
+    }
+
+    static stack(tensors, dim = 0) {
+        return new StackOp().apply(tensors, dim);
+    }
+
+    isContiguous() {
+        let shape = this.shape
+        let strides = this.strides
         let expectedStride = 1
 
         for (let i = shape.length - 1; i >= 0; i--) {
@@ -551,5 +602,14 @@ export class Tensor {
         builder += "]"
 
         return builder
+    }
+
+    static view(tensor, shape, strides, offset) {
+        return new Tensor(
+            tensor.data,
+            shape,
+            tensor.requiresGrad,
+            { strides, offset }
+        );
     }
 }
