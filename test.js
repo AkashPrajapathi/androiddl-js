@@ -1,4 +1,4 @@
-import { Tensor, RNNCell, RNN, Linear, GRUCell, GRU } from "./androiddl.js";
+import { Tensor, RNNCell, RNN, Linear, GRUCell, GRU, LSTMCell, LSTM } from "./androiddl.js";
 
 let passed = 0;
 let failed = 0;
@@ -2579,6 +2579,1446 @@ test("GRU initial hidden gradient numerical check", () => {
         `Analytical: ${analytical}, Numerical: ${numerical}`
     );
 });
+
+// --------------------------------------------------
+// 1. Forward output shapes
+// --------------------------------------------------
+
+test("LSTMCell forward output shapes", () => {
+    const cell = new LSTMCell(4, 5);
+
+    const x = makeTensor(Array(12).fill(0.2), [3, 4]);
+    const h = makeTensor(Array(15).fill(0.1), [3, 5]);
+    const c = makeTensor(Array(15).fill(0.3), [3, 5]);
+
+    const [hn, cn] = cell.forward(x, h, c);
+
+    assert(
+        hn.shape.join(",") === "3,5",
+        "Incorrect hidden shape"
+    );
+
+    assert(
+        cn.shape.join(",") === "3,5",
+        "Incorrect cell shape"
+    );
+});
+
+
+// --------------------------------------------------
+// 2. Output values must be finite
+// --------------------------------------------------
+
+test("LSTMCell outputs finite values", () => {
+    const cell = new LSTMCell(3, 4);
+
+    const x = makeTensor(Array(6).fill(0.5), [2, 3]);
+    const h = makeTensor(Array(8).fill(0.2), [2, 4]);
+    const c = makeTensor(Array(8).fill(0.4), [2, 4]);
+
+    const [hn, cn] = cell.forward(x, h, c);
+
+    for (const value of hn.data) {
+        assert(Number.isFinite(value), "Invalid hidden value");
+    }
+
+    for (const value of cn.data) {
+        assert(Number.isFinite(value), "Invalid cell value");
+    }
+});
+
+
+// --------------------------------------------------
+// 3. Hidden state and cell state must not mutate
+// --------------------------------------------------
+
+test("LSTMCell does not mutate input states", () => {
+    const cell = new LSTMCell(2, 3);
+
+    const x = makeTensor([0.1, 0.2], [1, 2]);
+    const h = makeTensor([0.3, 0.4, 0.5], [1, 3]);
+    const c = makeTensor([0.6, 0.7, 0.8], [1, 3]);
+
+    const hBefore = Array.from(h.data);
+    const cBefore = Array.from(c.data);
+
+    cell.forward(x, h, c);
+
+    assert(
+        h.data.every((v, i) => v === hBefore[i]),
+        "Hidden state was mutated"
+    );
+
+    assert(
+        c.data.every((v, i) => v === cBefore[i]),
+        "Cell state was mutated"
+    );
+});
+
+
+// --------------------------------------------------
+// 4. Batch independence
+// --------------------------------------------------
+
+test("LSTMCell batch independence", () => {
+    const cell = new LSTMCell(2, 3);
+
+    const x = makeTensor([
+        0.1, 0.2,
+        0.3, 0.4
+    ], [2, 2]);
+
+    const h = makeTensor([
+        0.2, 0.3, 0.4,
+        0.5, 0.6, 0.7
+    ], [2, 3]);
+
+    const c = makeTensor([
+        0.1, 0.2, 0.3,
+        0.4, 0.5, 0.6
+    ], [2, 3]);
+
+    const [hn, cn] = cell.forward(x, h, c);
+
+    for (let b = 0; b < 2; b++) {
+        const xSingle = makeTensor(
+            x.data.slice(b * 2, (b + 1) * 2),
+            [1, 2]
+        );
+
+        const hSingle = makeTensor(
+            h.data.slice(b * 3, (b + 1) * 3),
+            [1, 3]
+        );
+
+        const cSingle = makeTensor(
+            c.data.slice(b * 3, (b + 1) * 3),
+            [1, 3]
+        );
+
+        const [hs, cs] = cell.forward(
+            xSingle,
+            hSingle,
+            cSingle
+        );
+
+        for (let j = 0; j < 3; j++) {
+            assert(
+                Math.abs(hn.data[b * 3 + j] - hs.data[j]) < 1e-6,
+                "Hidden batch independence failed"
+            );
+
+            assert(
+                Math.abs(cn.data[b * 3 + j] - cs.data[j]) < 1e-6,
+                "Cell batch independence failed"
+            );
+        }
+    }
+});
+
+
+// --------------------------------------------------
+// 5. Backward through input, hidden and cell states
+// --------------------------------------------------
+
+test("LSTMCell backward through all inputs", () => {
+    const cell = new LSTMCell(2, 3);
+
+    const x = makeTensor([0.1, 0.2], [1, 2], true);
+    const h = makeTensor([0.3, 0.4, 0.5], [1, 3], true);
+    const c = makeTensor([0.6, 0.7, 0.8], [1, 3], true);
+
+    const [hn, cn] = cell.forward(x, h, c);
+
+    const loss = hn.sum().add(cn.sum());
+
+    loss.backward();
+
+    assert(x.grad !== null, "Input gradient missing");
+    assert(h.grad !== null, "Hidden gradient missing");
+    assert(c.grad !== null, "Cell gradient missing");
+});
+
+
+// --------------------------------------------------
+// 6. Gradients reach all eight Linear layers
+// --------------------------------------------------
+
+test("LSTMCell gradients reach all Linear layers", () => {
+    const cell = new LSTMCell(2, 3);
+
+    const x = makeTensor([0.1, 0.2], [1, 2], true);
+    const h = makeTensor([0.3, 0.4, 0.5], [1, 3], true);
+    const c = makeTensor([0.6, 0.7, 0.8], [1, 3], true);
+
+    const [hn, cn] = cell.forward(x, h, c);
+
+    hn.sum().add(cn.sum()).backward();
+
+    const layers = [
+        cell.xf, cell.hf,
+        cell.xi, cell.hi,
+        cell.xc, cell.hc,
+        cell.xo, cell.ho
+    ];
+
+    for (let i = 0; i < layers.length; i++) {
+        const params = layers[i].parameters();
+
+        assert(params.length > 0, `Layer ${i} has no parameters`);
+
+        for (const param of params) {
+            assert(param.grad !== null, `Layer ${i} gradient missing`);
+        }
+    }
+});
+
+
+// --------------------------------------------------
+// 7. Forget gate gradient path
+// --------------------------------------------------
+
+test("LSTMCell forget gate receives gradients", () => {
+    const cell = new LSTMCell(2, 3);
+
+    const x = makeTensor([0.2, 0.4], [1, 2], true);
+    const h = makeTensor([0.1, 0.3, 0.5], [1, 3], true);
+    const c = makeTensor([0.6, 0.7, 0.8], [1, 3], true);
+
+    const [, cn] = cell.forward(x, h, c);
+
+    cn.sum().backward();
+
+    for (const layer of [cell.xf, cell.hf]) {
+        for (const p of layer.parameters()) {
+            assert(p.grad !== null, "Forget gate gradient missing");
+        }
+    }
+});
+
+
+// --------------------------------------------------
+// 8. Input gate gradient path
+// --------------------------------------------------
+
+test("LSTMCell input gate receives gradients", () => {
+    const cell = new LSTMCell(2, 3);
+
+    const x = makeTensor([0.2, 0.4], [1, 2], true);
+    const h = makeTensor([0.1, 0.3, 0.5], [1, 3], true);
+    const c = makeTensor([0.6, 0.7, 0.8], [1, 3], true);
+
+    const [, cn] = cell.forward(x, h, c);
+
+    cn.sum().backward();
+
+    for (const layer of [cell.xi, cell.hi]) {
+        for (const p of layer.parameters()) {
+            assert(p.grad !== null, "Input gate gradient missing");
+        }
+    }
+});
+
+
+// --------------------------------------------------
+// 9. Candidate cell gradient path
+// --------------------------------------------------
+
+test("LSTMCell candidate receives gradients", () => {
+    const cell = new LSTMCell(2, 3);
+
+    const x = makeTensor([0.2, 0.4], [1, 2], true);
+    const h = makeTensor([0.1, 0.3, 0.5], [1, 3], true);
+    const c = makeTensor([0.6, 0.7, 0.8], [1, 3], true);
+
+    const [, cn] = cell.forward(x, h, c);
+
+    cn.sum().backward();
+
+    for (const layer of [cell.xc, cell.hc]) {
+        for (const p of layer.parameters()) {
+            assert(p.grad !== null, "Candidate gradient missing");
+        }
+    }
+});
+
+
+// --------------------------------------------------
+// 10. Output gate gradient path
+// --------------------------------------------------
+
+test("LSTMCell output gate receives gradients", () => {
+    const cell = new LSTMCell(2, 3);
+
+    const x = makeTensor([0.2, 0.4], [1, 2], true);
+    const h = makeTensor([0.1, 0.3, 0.5], [1, 3], true);
+    const c = makeTensor([0.6, 0.7, 0.8], [1, 3], true);
+
+    const [hn] = cell.forward(x, h, c);
+
+    hn.sum().backward();
+
+    for (const layer of [cell.xo, cell.ho]) {
+        for (const p of layer.parameters()) {
+            assert(p.grad !== null, "Output gate gradient missing");
+        }
+    }
+});
+
+
+// --------------------------------------------------
+// 11. Numerical gradient: input
+// --------------------------------------------------
+
+test("LSTMCell numerical gradient input", () => {
+    const cell = new LSTMCell(2, 2);
+
+    const x = makeTensor([0.2, -0.3], [1, 2], true);
+    const h = makeTensor([0.1, 0.4], [1, 2], true);
+    const c = makeTensor([0.5, -0.2], [1, 2], true);
+
+    const [hn, cn] = cell.forward(x, h, c);
+
+    hn.sum().add(cn.sum()).backward();
+
+    const eps = 1e-3;
+
+    for (let i = 0; i < x.numel; i++) {
+        const original = x.data[i];
+
+        x.data[i] = original + eps;
+        const [hp, cp] = cell.forward(x, h, c);
+        const plus = hp.data.reduce((a, b) => a + b, 0)
+            + cp.data.reduce((a, b) => a + b, 0);
+
+        x.data[i] = original - eps;
+        const [hm, cm] = cell.forward(x, h, c);
+        const minus = hm.data.reduce((a, b) => a + b, 0)
+            + cm.data.reduce((a, b) => a + b, 0);
+
+        x.data[i] = original;
+
+        const numerical = (plus - minus) / (2 * eps);
+
+        assert(
+            Math.abs(x.grad.data[i] - numerical) < 2e-2,
+            `Input gradient mismatch at ${i}: ${x.grad.data[i]} vs ${numerical}`
+        );
+    }
+});
+
+
+// --------------------------------------------------
+// 12. Numerical gradient: hidden state
+// --------------------------------------------------
+
+test("LSTMCell numerical gradient hidden state", () => {
+    const cell = new LSTMCell(2, 2);
+
+    const x = makeTensor([0.2, -0.3], [1, 2], true);
+    const h = makeTensor([0.1, 0.4], [1, 2], true);
+    const c = makeTensor([0.5, -0.2], [1, 2], true);
+
+    const [hn, cn] = cell.forward(x, h, c);
+
+    hn.sum().add(cn.sum()).backward();
+
+    const eps = 1e-3;
+
+    for (let i = 0; i < h.numel; i++) {
+        const original = h.data[i];
+
+        h.data[i] = original + eps;
+        const [hp, cp] = cell.forward(x, h, c);
+        const plus = hp.data.reduce((a, b) => a + b, 0)
+            + cp.data.reduce((a, b) => a + b, 0);
+
+        h.data[i] = original - eps;
+        const [hm, cm] = cell.forward(x, h, c);
+        const minus = hm.data.reduce((a, b) => a + b, 0)
+            + cm.data.reduce((a, b) => a + b, 0);
+
+        h.data[i] = original;
+
+        const numerical = (plus - minus) / (2 * eps);
+
+        assert(
+            Math.abs(h.grad.data[i] - numerical) < 2e-2,
+            `Hidden gradient mismatch at ${i}: ${h.grad.data[i]} vs ${numerical}`
+        );
+    }
+});
+
+
+// --------------------------------------------------
+// 13. Numerical gradient: cell state
+// --------------------------------------------------
+
+test("LSTMCell numerical gradient cell state", () => {
+    const cell = new LSTMCell(2, 2);
+
+    const x = makeTensor([0.2, -0.3], [1, 2], true);
+    const h = makeTensor([0.1, 0.4], [1, 2], true);
+    const c = makeTensor([0.5, -0.2], [1, 2], true);
+
+    const [hn, cn] = cell.forward(x, h, c);
+
+    hn.sum().add(cn.sum()).backward();
+
+    const eps = 1e-3;
+
+    for (let i = 0; i < c.numel; i++) {
+        const original = c.data[i];
+
+        c.data[i] = original + eps;
+        const [hp, cp] = cell.forward(x, h, c);
+        const plus = hp.data.reduce((a, b) => a + b, 0)
+            + cp.data.reduce((a, b) => a + b, 0);
+
+        c.data[i] = original - eps;
+        const [hm, cm] = cell.forward(x, h, c);
+        const minus = hm.data.reduce((a, b) => a + b, 0)
+            + cm.data.reduce((a, b) => a + b, 0);
+
+        c.data[i] = original;
+
+        const numerical = (plus - minus) / (2 * eps);
+
+        assert(
+            Math.abs(c.grad.data[i] - numerical) < 2e-2,
+            `Cell gradient mismatch at ${i}: ${c.grad.data[i]} vs ${numerical}`
+        );
+    }
+});
+
+
+// --------------------------------------------------
+// 14. Sequence-like repeated calls
+// --------------------------------------------------
+
+test("LSTMCell supports repeated timestep calls", () => {
+    const cell = new LSTMCell(2, 3);
+
+    let h = makeTensor([0, 0, 0], [1, 3]);
+    let c = makeTensor([0, 0, 0], [1, 3]);
+
+    for (let t = 0; t < 5; t++) {
+        const x = makeTensor(
+            [0.1 * (t + 1), 0.2 * (t + 1)],
+            [1, 2]
+        );
+
+        [h, c] = cell.forward(x, h, c);
+    }
+
+    assert(h.shape.join(",") === "1,3", "Invalid hidden shape");
+    assert(c.shape.join(",") === "1,3", "Invalid cell shape");
+
+    for (const v of h.data) {
+        assert(Number.isFinite(v), "Invalid final hidden value");
+    }
+
+    for (const v of c.data) {
+        assert(Number.isFinite(v), "Invalid final cell value");
+    }
+});
+
+
+// --------------------------------------------------
+// 15. Zero-sized batch
+// --------------------------------------------------
+
+test("LSTMCell supports zero-sized batch", () => {
+    const cell = new LSTMCell(2, 3);
+
+    const x = makeTensor([], [0, 2]);
+    const h = makeTensor([], [0, 3]);
+    const c = makeTensor([], [0, 3]);
+
+    const [hn, cn] = cell.forward(x, h, c);
+
+    assert(hn.shape.join(",") === "0,3", "Invalid hidden shape");
+    assert(cn.shape.join(",") === "0,3", "Invalid cell shape");
+});
+
+
+// --------------------------------------------------
+// 16. Bias disabled
+// --------------------------------------------------
+
+test("LSTMCell supports bias disabled", () => {
+    const cell = new LSTMCell(2, 3, false);
+
+    const x = makeTensor([0.1, 0.2], [1, 2]);
+    const h = makeTensor([0.3, 0.4, 0.5], [1, 3]);
+    const c = makeTensor([0.6, 0.7, 0.8], [1, 3]);
+
+    const [hn, cn] = cell.forward(x, h, c);
+
+    assert(hn.shape.join(",") === "1,3", "Invalid hidden shape");
+    assert(cn.shape.join(",") === "1,3", "Invalid cell shape");
+
+    for (const layer of [
+        cell.xf, cell.hf,
+        cell.xi, cell.hi,
+        cell.xc, cell.hc,
+        cell.xo, cell.ho
+    ]) {
+        assert(
+            layer.bias === null || layer.bias === undefined,
+            "Bias should be disabled"
+        );
+    }
+});
+
+
+// --------------------------------------------------
+// 17. Different hidden and input sizes
+// --------------------------------------------------
+
+test("LSTMCell supports different input and hidden sizes", () => {
+    const cell = new LSTMCell(4, 2);
+
+    const x = makeTensor([0.1, 0.2, 0.3, 0.4], [1, 4]);
+    const h = makeTensor([0.5, 0.6], [1, 2]);
+    const c = makeTensor([0.7, 0.8], [1, 2]);
+
+    const [hn, cn] = cell.forward(x, h, c);
+
+    assert(hn.shape.join(",") === "1,2", "Invalid hidden shape");
+    assert(cn.shape.join(",") === "1,2", "Invalid cell shape");
+});
+
+
+// --------------------------------------------------
+// 18. Hidden and cell outputs are distinct
+// --------------------------------------------------
+
+test("LSTMCell returns separate hidden and cell states", () => {
+    const cell = new LSTMCell(2, 3);
+
+    const x = makeTensor([0.2, 0.4], [1, 2]);
+    const h = makeTensor([0.1, 0.3, 0.5], [1, 3]);
+    const c = makeTensor([0.6, 0.7, 0.8], [1, 3]);
+
+    const result = cell.forward(x, h, c);
+
+    assert(Array.isArray(result), "Expected array result");
+    assert(result.length === 2, "Expected two outputs");
+
+    const [hn, cn] = result;
+
+    assert(hn !== cn, "Hidden and cell states must be separate tensors");
+    assert(hn.shape.join(",") === cn.shape.join(","), "State shapes differ");
+});
+
+function allFinite(tensor) {
+    return tensor.data.every(Number.isFinite);
+}
+
+function close(a, b, tolerance = 1e-5) {
+    return Math.abs(a - b) < tolerance;
+}
+
+// 1. Output shapes
+test("LSTM output shapes", () => {
+    const lstm = new LSTM(3, 4);
+
+    const input = makeTensor(
+        Array(5 * 2 * 3).fill(0.5),
+        [5, 2, 3]
+    );
+
+    const [output, hn, cn] = lstm.forward(input);
+
+    assert(
+        JSON.stringify(output.shape) === JSON.stringify([5, 2, 4]),
+        "Incorrect output shape"
+    );
+
+    assert(
+        JSON.stringify(hn.shape) === JSON.stringify([2, 4]),
+        "Incorrect final hidden shape"
+    );
+
+    assert(
+        JSON.stringify(cn.shape) === JSON.stringify([2, 4]),
+        "Incorrect final cell shape"
+    );
+});
+
+// 2. Finite outputs
+test("LSTM outputs are finite", () => {
+    const lstm = new LSTM(3, 4);
+
+    const input = makeTensor(
+        Array(5 * 2 * 3).fill(0.2),
+        [5, 2, 3]
+    );
+
+    const [output, hn, cn] = lstm.forward(input);
+
+    assert(allFinite(output), "Output contains non-finite values");
+    assert(allFinite(hn), "Hidden state contains non-finite values");
+    assert(allFinite(cn), "Cell state contains non-finite values");
+});
+
+// 3. Zero initial states
+test("LSTM works with omitted initial states", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(4 * 2 * 2).fill(0.1),
+        [4, 2, 2]
+    );
+
+    const [output, hn, cn] = lstm.forward(input);
+
+    assert(output.shape[0] === 4, "Incorrect sequence length");
+    assert(hn.shape[0] === 2, "Incorrect batch size");
+    assert(cn.shape[0] === 2, "Incorrect batch size");
+});
+
+// 4. Explicit initial states
+test("LSTM accepts explicit initial states", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(4 * 2 * 2).fill(0.1),
+        [4, 2, 2]
+    );
+
+    const h0 = makeTensor(Array(6).fill(0.3), [2, 3]);
+    const c0 = makeTensor(Array(6).fill(0.4), [2, 3]);
+
+    const [output, hn, cn] = lstm.forward(input, h0, c0);
+
+    assert(allFinite(output), "Invalid output");
+    assert(allFinite(hn), "Invalid final hidden state");
+    assert(allFinite(cn), "Invalid final cell state");
+});
+
+// 5. Final states equal last output timestep
+test("Final hidden state equals last output timestep", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(4 * 2 * 2).fill(0.2),
+        [4, 2, 2]
+    );
+
+    const [output, hn] = lstm.forward(input);
+
+    const lastOffset = 3 * 2 * 3;
+
+    for (let i = 0; i < hn.data.length; i++) {
+        assert(
+            close(output.data[lastOffset + i], hn.data[i]),
+            `Mismatch at ${i}`
+        );
+    }
+});
+
+// 6. Inputs are not mutated
+test("LSTM does not mutate input or initial states", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(3 * 2 * 2).fill(0.2),
+        [3, 2, 2]
+    );
+
+    const h0 = makeTensor(Array(6).fill(0.1), [2, 3]);
+    const c0 = makeTensor(Array(6).fill(0.2), [2, 3]);
+
+    const inputBefore = values(input);
+    const hBefore = values(h0);
+    const cBefore = values(c0);
+
+    lstm.forward(input, h0, c0);
+
+    assert(
+        values(input).every((v, i) => v === inputBefore[i]),
+        "Input was mutated"
+    );
+
+    assert(
+        values(h0).every((v, i) => v === hBefore[i]),
+        "Initial hidden state was mutated"
+    );
+
+    assert(
+        values(c0).every((v, i) => v === cBefore[i]),
+        "Initial cell state was mutated"
+    );
+});
+
+// 7. Backward through input
+test("LSTM propagates gradients to input", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(3 * 2 * 2).fill(0.2),
+        [3, 2, 2],
+        true
+    );
+
+    const [output] = lstm.forward(input);
+
+    output.sum().backward();
+
+    assert(input.grad != null, "Input gradient missing");
+    assert(
+        input.grad.data.some(v => Math.abs(v) > 1e-8),
+        "Input gradient is zero"
+    );
+});
+
+// 8. Backward through initial hidden state
+test("LSTM propagates gradients to h0", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(3 * 2 * 2).fill(0.2),
+        [3, 2, 2]
+    );
+
+    const h0 = makeTensor(Array(6).fill(0.1), [2, 3], true);
+    const c0 = makeTensor(Array(6).fill(0.2), [2, 3]);
+
+    const [output] = lstm.forward(input, h0, c0);
+
+    output.sum().backward();
+
+    assert(h0.grad != null, "h0 gradient missing");
+    assert(
+        h0.grad.data.some(v => Math.abs(v) > 1e-8),
+        "h0 gradient is zero"
+    );
+});
+
+// 9. Backward through initial cell state
+test("LSTM propagates gradients to c0", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(3 * 2 * 2).fill(0.2),
+        [3, 2, 2]
+    );
+
+    const h0 = makeTensor(Array(6).fill(0.1), [2, 3]);
+    const c0 = makeTensor(Array(6).fill(0.2), [2, 3], true);
+
+    const [output] = lstm.forward(input, h0, c0);
+
+    output.sum().backward();
+
+    assert(c0.grad != null, "c0 gradient missing");
+    assert(
+        c0.grad.data.some(v => Math.abs(v) > 1e-8),
+        "c0 gradient is zero"
+    );
+});
+
+// 10. Gradients reach all parameters
+test("LSTM propagates gradients to all parameters", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(4 * 2 * 2).fill(0.2),
+        [4, 2, 2],
+        true
+    );
+
+    const [output] = lstm.forward(input);
+
+    output.sum().backward();
+
+    const parameters = lstm.parameters();
+
+    assert(parameters.length > 0, "No parameters found");
+
+    for (const parameter of parameters) {
+        assert(parameter.grad != null, "Parameter gradient missing");
+    }
+});
+
+// 11. Repeated calls
+test("LSTM can process multiple sequences", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input1 = makeTensor(
+        Array(3 * 2 * 2).fill(0.1),
+        [3, 2, 2]
+    );
+
+    const input2 = makeTensor(
+        Array(3 * 2 * 2).fill(0.3),
+        [3, 2, 2]
+    );
+
+    const [out1] = lstm.forward(input1);
+    const [out2] = lstm.forward(input2);
+
+    assert(allFinite(out1), "First output invalid");
+    assert(allFinite(out2), "Second output invalid");
+});
+
+// 12. Empty sequence
+test("LSTM handles empty sequence", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor([], [0, 2, 2]);
+
+    const [output, hn, cn] = lstm.forward(input);
+
+    assert(
+        JSON.stringify(output.shape) === JSON.stringify([0, 2, 3]),
+        "Incorrect empty output shape"
+    );
+
+    assert(hn.shape[0] === 2, "Incorrect hidden state shape");
+    assert(cn.shape[0] === 2, "Incorrect cell state shape");
+});
+
+// 13. Bias disabled
+test("LSTM works without bias", () => {
+    const lstm = new LSTM(2, 3, false);
+
+    const input = makeTensor(
+        Array(3 * 2 * 2).fill(0.2),
+        [3, 2, 2]
+    );
+
+    const [output, hn, cn] = lstm.forward(input);
+
+    assert(allFinite(output), "Invalid output");
+    assert(allFinite(hn), "Invalid hidden state");
+    assert(allFinite(cn), "Invalid cell state");
+});
+
+// 14. Different input and hidden sizes
+test("LSTM supports different input and hidden sizes", () => {
+    const lstm = new LSTM(5, 2);
+
+    const input = makeTensor(
+        Array(4 * 3 * 5).fill(0.2),
+        [4, 3, 5]
+    );
+
+    const [output, hn, cn] = lstm.forward(input);
+
+    assert(
+        JSON.stringify(output.shape) === JSON.stringify([4, 3, 2]),
+        "Incorrect output shape"
+    );
+
+    assert(
+        JSON.stringify(hn.shape) === JSON.stringify([3, 2]),
+        "Incorrect hidden shape"
+    );
+
+    assert(
+        JSON.stringify(cn.shape) === JSON.stringify([3, 2]),
+        "Incorrect cell shape"
+    );
+});
+
+function assertShape(tensor, expected, message) {
+    assert(
+        JSON.stringify(tensor.shape) === JSON.stringify(expected),
+        message
+    );
+}
+
+function objective(lstm, input, h0, c0) {
+    const [output, hn, cn] = lstm.forward(input, h0, c0);
+
+    return (
+        output.sum()
+            .add(hn.sum())
+            .add(cn.sum())
+            .data[0]
+    );
+}
+
+function numericalGradient(data, index, evaluate, epsilon = 1e-3) {
+    const original = data[index];
+
+    data[index] = original + epsilon;
+    const positive = evaluate();
+
+    data[index] = original - epsilon;
+    const negative = evaluate();
+
+    data[index] = original;
+
+    return (positive - negative) / (2 * epsilon);
+}
+
+function checkNumericalGradient(
+    tensor,
+    index,
+    analytical,
+    evaluate,
+    tolerance = 2e-2
+) {
+    const numerical = numericalGradient(
+        tensor.data,
+        index,
+        evaluate
+    );
+
+    assert(
+        Math.abs(analytical - numerical) < tolerance,
+        `Gradient mismatch at ${index}: ${analytical} vs ${numerical}`
+    );
+}
+
+// --------------------------------------------------
+// 1. Forward tests
+// --------------------------------------------------
+
+test("LSTM output shapes", () => {
+    const lstm = new LSTM(3, 4);
+
+    const input = makeTensor(
+        Array(5 * 2 * 3).fill(0.2),
+        [5, 2, 3]
+    );
+
+    const [output, hn, cn] = lstm.forward(input);
+
+    assertShape(output, [5, 2, 4], "Wrong output shape");
+    assertShape(hn, [2, 4], "Wrong hidden shape");
+    assertShape(cn, [2, 4], "Wrong cell shape");
+});
+
+test("LSTM outputs finite values", () => {
+    const lstm = new LSTM(3, 4);
+
+    const input = makeTensor(
+        Array(4 * 2 * 3).fill(0.3),
+        [4, 2, 3]
+    );
+
+    const [output, hn, cn] = lstm.forward(input);
+
+    assert(allFinite(output), "Output contains non-finite values");
+    assert(allFinite(hn), "Hidden state contains non-finite values");
+    assert(allFinite(cn), "Cell state contains non-finite values");
+});
+
+test("LSTM sequence length one", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        [0.1, 0.2, 0.3, 0.4],
+        [1, 2, 2]
+    );
+
+    const [output, hn] = lstm.forward(input);
+
+    assertShape(output, [1, 2, 3], "Wrong output shape");
+    
+    for (let i = 0; i < hn.data.length; i++) {
+        assert(
+            close(output.data[i], hn.data[i]),
+            `Final hidden mismatch at ${i}`
+        );
+    }
+});
+
+test("LSTM final hidden equals last output timestep", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(4 * 2 * 2).fill(0.2),
+        [4, 2, 2]
+    );
+
+    const [output, hn] = lstm.forward(input);
+
+    const lastOffset = 3 * 2 * 3;
+
+    for (let i = 0; i < hn.data.length; i++) {
+        assert(
+            close(output.data[lastOffset + i], hn.data[i]),
+            `Final hidden mismatch at ${i}`
+        );
+    }
+});
+
+// --------------------------------------------------
+// 2. Initial state tests
+// --------------------------------------------------
+
+test("LSTM initializes zero states automatically", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(3 * 2 * 2).fill(0.1),
+        [3, 2, 2]
+    );
+
+    const [output, hn, cn] = lstm.forward(input);
+
+    assert(allFinite(output), "Invalid output");
+    assert(allFinite(hn), "Invalid hidden state");
+    assert(allFinite(cn), "Invalid cell state");
+});
+
+test("LSTM accepts explicit initial states", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(3 * 2 * 2).fill(0.2),
+        [3, 2, 2]
+    );
+
+    const h0 = makeTensor(Array(6).fill(0.3), [2, 3]);
+    const c0 = makeTensor(Array(6).fill(0.4), [2, 3]);
+
+    const [output, hn, cn] = lstm.forward(input, h0, c0);
+
+    assert(allFinite(output), "Invalid output");
+    assert(allFinite(hn), "Invalid hidden state");
+    assert(allFinite(cn), "Invalid cell state");
+});
+
+test("LSTM preserves initial states when sequence is empty", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor([], [0, 2, 2]);
+
+    const h0 = makeTensor(Array(6).fill(0.3), [2, 3]);
+    const c0 = makeTensor(Array(6).fill(0.4), [2, 3]);
+
+    const [output, hn, cn] = lstm.forward(input, h0, c0);
+
+    assertShape(output, [0, 2, 3], "Wrong empty output shape");
+
+    for (let i = 0; i < h0.data.length; i++) {
+        assert(close(hn.data[i], h0.data[i]), "h0 was not preserved");
+        assert(close(cn.data[i], c0.data[i]), "c0 was not preserved");
+    }
+});
+
+// --------------------------------------------------
+// 3. Input and state mutation tests
+// --------------------------------------------------
+
+test("LSTM does not mutate input", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(3 * 2 * 2).fill(0.2),
+        [3, 2, 2]
+    );
+
+    const before = Array.from(input.data);
+
+    lstm.forward(input);
+
+    assert(
+        input.data.every((v, i) => v === before[i]),
+        "Input was mutated"
+    );
+});
+
+test("LSTM does not mutate initial states", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(3 * 2 * 2).fill(0.2),
+        [3, 2, 2]
+    );
+
+    const h0 = makeTensor(Array(6).fill(0.3), [2, 3]);
+    const c0 = makeTensor(Array(6).fill(0.4), [2, 3]);
+
+    const hBefore = Array.from(h0.data);
+    const cBefore = Array.from(c0.data);
+
+    lstm.forward(input, h0, c0);
+
+    assert(
+        h0.data.every((v, i) => v === hBefore[i]),
+        "h0 was mutated"
+    );
+
+    assert(
+        c0.data.every((v, i) => v === cBefore[i]),
+        "c0 was mutated"
+    );
+});
+
+// --------------------------------------------------
+// 4. Batch and sequence behavior
+// --------------------------------------------------
+
+test("LSTM supports different input and hidden sizes", () => {
+    const lstm = new LSTM(5, 2);
+
+    const input = makeTensor(
+        Array(4 * 3 * 5).fill(0.2),
+        [4, 3, 5]
+    );
+
+    const [output, hn, cn] = lstm.forward(input);
+
+    assertShape(output, [4, 3, 2], "Wrong output shape");
+    assertShape(hn, [3, 2], "Wrong hidden shape");
+    assertShape(cn, [3, 2], "Wrong cell shape");
+});
+
+test("LSTM supports zero-sized batch", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor([], [4, 0, 2]);
+
+    const [output, hn, cn] = lstm.forward(input);
+
+    assertShape(output, [4, 0, 3], "Wrong output shape");
+    assertShape(hn, [0, 3], "Wrong hidden shape");
+    assertShape(cn, [0, 3], "Wrong cell shape");
+});
+
+test("LSTM supports non-contiguous input", () => {
+    const lstm = new LSTM(2, 3);
+
+    const base = makeTensor(
+        Array(3 * 2 * 4).fill(0.2),
+        [3, 2, 4]
+    );
+
+    const input = base.permute(0, 2, 1);
+
+    assert(!input.isContiguous(), "Input should be non-contiguous");
+
+    const [output, hn, cn] = lstm.forward(input);
+
+    assertShape(output, [3, 4, 3], "Wrong output shape");
+    assert(allFinite(output), "Invalid output");
+    assert(allFinite(hn), "Invalid hidden state");
+    assert(allFinite(cn), "Invalid cell state");
+});
+
+test("LSTM resets states between forward calls", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(3 * 1 * 2).fill(0.2),
+        [3, 1, 2]
+    );
+
+    const [output1] = lstm.forward(input);
+    const [output2] = lstm.forward(input);
+
+    for (let i = 0; i < output1.data.length; i++) {
+        assert(
+            close(output1.data[i], output2.data[i]),
+            `Output differs at ${i}`
+        );
+    }
+});
+
+test("LSTM can process different sequences repeatedly", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input1 = makeTensor(
+        Array(3 * 1 * 2).fill(0.1),
+        [3, 1, 2]
+    );
+
+    const input2 = makeTensor(
+        Array(3 * 1 * 2).fill(0.5),
+        [3, 1, 2]
+    );
+
+    const [out1] = lstm.forward(input1);
+    const [out2] = lstm.forward(input2);
+
+    assert(allFinite(out1), "First output invalid");
+    assert(allFinite(out2), "Second output invalid");
+});
+
+// --------------------------------------------------
+// 5. Backward / BPTT tests
+// --------------------------------------------------
+
+test("LSTM propagates gradients to input", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(3 * 1 * 2).fill(0.2),
+        [3, 1, 2],
+        true
+    );
+
+    const [output] = lstm.forward(input);
+
+    output.sum().backward();
+
+    assert(input.grad != null, "Input gradient missing");
+    assert(
+        input.grad.data.some(v => Math.abs(v) > 1e-8),
+        "Input gradient is zero"
+    );
+});
+
+test("LSTM propagates gradients to initial hidden state", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(3 * 1 * 2).fill(0.2),
+        [3, 1, 2]
+    );
+
+    const h0 = makeTensor(Array(3).fill(0.2), [1, 3], true);
+    const c0 = makeTensor(Array(3).fill(0.3), [1, 3]);
+
+    const [output] = lstm.forward(input, h0, c0);
+
+    output.sum().backward();
+
+    assert(h0.grad != null, "h0 gradient missing");
+    assert(
+        h0.grad.data.some(v => Math.abs(v) > 1e-8),
+        "h0 gradient is zero"
+    );
+});
+
+test("LSTM propagates gradients to initial cell state", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(3 * 1 * 2).fill(0.2),
+        [3, 1, 2]
+    );
+
+    const h0 = makeTensor(Array(3).fill(0.2), [1, 3]);
+    const c0 = makeTensor(Array(3).fill(0.3), [1, 3], true);
+
+    const [output] = lstm.forward(input, h0, c0);
+
+    output.sum().backward();
+
+    assert(c0.grad != null, "c0 gradient missing");
+    assert(
+        c0.grad.data.some(v => Math.abs(v) > 1e-8),
+        "c0 gradient is zero"
+    );
+});
+
+test("LSTM gradients flow through all output timesteps", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(4 * 1 * 2).fill(0.2),
+        [4, 1, 2],
+        true
+    );
+
+    const [output] = lstm.forward(input);
+
+    output.sum().backward();
+
+    assert(input.grad != null, "Input gradient missing");
+
+    for (let t = 0; t < 4; t++) {
+        const start = t * 2;
+        const end = start + 2;
+
+        const hasGradient = input.grad.data
+            .slice(start, end)
+            .some(v => Math.abs(v) > 1e-8);
+
+        assert(hasGradient, `No gradient at timestep ${t}`);
+    }
+});
+
+test("LSTM gradients reach all parameters", () => {
+    const lstm = new LSTM(2, 3);
+
+    const input = makeTensor(
+        Array(3 * 1 * 2).fill(0.2),
+        [3, 1, 2],
+        true
+    );
+
+    const [output, hn, cn] = lstm.forward(input);
+
+    output.sum().add(hn.sum()).add(cn.sum()).backward();
+
+    const parameters = lstm.parameters();
+
+    assert(parameters.length > 0, "No parameters found");
+
+    for (let i = 0; i < parameters.length; i++) {
+        assert(
+            parameters[i].grad != null,
+            `Parameter ${i} gradient missing`
+        );
+
+        assert(
+            allFinite(parameters[i].grad),
+            `Parameter ${i} gradient is not finite`
+        );
+    }
+});
+
+// --------------------------------------------------
+// 6. Numerical gradient checks
+// --------------------------------------------------
+
+test("LSTM input gradient numerical check", () => {
+    const lstm = new LSTM(2, 2);
+
+    const input = makeTensor(
+        [0.2, 0.3, 0.4, 0.1],
+        [2, 1, 2],
+        true
+    );
+
+    const h0 = makeTensor([0.1, 0.2], [1, 2]);
+    const c0 = makeTensor([0.3, 0.1], [1, 2]);
+
+    const [output, hn, cn] = lstm.forward(input, h0, c0);
+
+    output.sum().add(hn.sum()).add(cn.sum()).backward();
+
+    for (let i = 0; i < input.data.length; i++) {
+        checkNumericalGradient(
+            input,
+            i,
+            input.grad.data[i],
+            () => objective(lstm, input, h0, c0)
+        );
+    }
+});
+
+test("LSTM initial hidden gradient numerical check", () => {
+    const lstm = new LSTM(2, 2);
+
+    const input = makeTensor(
+        [0.2, 0.3, 0.4, 0.1],
+        [2, 1, 2]
+    );
+
+    const h0 = makeTensor([0.1, 0.2], [1, 2], true);
+    const c0 = makeTensor([0.3, 0.1], [1, 2]);
+
+    const [output, hn, cn] = lstm.forward(input, h0, c0);
+
+    output.sum().add(hn.sum()).add(cn.sum()).backward();
+
+    for (let i = 0; i < h0.data.length; i++) {
+        checkNumericalGradient(
+            h0,
+            i,
+            h0.grad.data[i],
+            () => objective(lstm, input, h0, c0)
+        );
+    }
+});
+
+test("LSTM initial cell gradient numerical check", () => {
+    const lstm = new LSTM(2, 2);
+
+    const input = makeTensor(
+        [0.2, 0.3, 0.4, 0.1],
+        [2, 1, 2]
+    );
+
+    const h0 = makeTensor([0.1, 0.2], [1, 2]);
+    const c0 = makeTensor([0.3, 0.1], [1, 2], true);
+
+    const [output, hn, cn] = lstm.forward(input, h0, c0);
+
+    output.sum().add(hn.sum()).add(cn.sum()).backward();
+
+    for (let i = 0; i < c0.data.length; i++) {
+        checkNumericalGradient(
+            c0,
+            i,
+            c0.grad.data[i],
+            () => objective(lstm, input, h0, c0)
+        );
+    }
+});
+
+test("LSTM recurrent parameter numerical gradient check", () => {
+    const lstm = new LSTM(2, 2);
+
+    const input = makeTensor(
+        [0.2, 0.3, 0.4, 0.1],
+        [2, 1, 2]
+    );
+
+    const h0 = makeTensor([0.1, 0.2], [1, 2]);
+    const c0 = makeTensor([0.3, 0.1], [1, 2]);
+
+    const [output, hn, cn] = lstm.forward(input, h0, c0);
+
+    output.sum().add(hn.sum()).add(cn.sum()).backward();
+
+    const parameters = lstm.parameters();
+
+    // Check one element of every parameter tensor.
+    for (let p = 0; p < parameters.length; p++) {
+        const parameter = parameters[p];
+
+        assert(parameter.grad != null, `Parameter ${p} gradient missing`);
+
+        checkNumericalGradient(
+            parameter,
+            0,
+            parameter.grad.data[0],
+            () => objective(lstm, input, h0, c0),
+            3e-2
+        );
+    }
+});
+
+// --------------------------------------------------
+// 7. Configuration tests
+// --------------------------------------------------
+
+test("LSTM works without bias", () => {
+    const lstm = new LSTM(2, 3, false);
+
+    const input = makeTensor(
+        Array(3 * 1 * 2).fill(0.2),
+        [3, 1, 2]
+    );
+
+    const [output, hn, cn] = lstm.forward(input);
+
+    assert(allFinite(output), "Invalid output");
+    assert(allFinite(hn), "Invalid hidden state");
+    assert(allFinite(cn), "Invalid cell state");
+});
+
+test("LSTM shares the same cell across timesteps", () => {
+    const lstm = new LSTM(2, 3);
+
+    const cell = lstm.cell;
+
+    const input = makeTensor(
+        Array(4 * 1 * 2).fill(0.2),
+        [4, 1, 2]
+    );
+
+    lstm.forward(input);
+
+    assert(
+        lstm.cell === cell,
+        "LSTM cell instance changed"
+    );
+});
+
+
 
 // ==================================================
 // SUMMARY
