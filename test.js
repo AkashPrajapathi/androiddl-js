@@ -1,4 +1,4 @@
-import { Tensor, RNNCell, RNN, Linear } from "./androiddl.js";
+import { Tensor, RNNCell, RNN, Linear, GRUCell, GRU } from "./androiddl.js";
 
 let passed = 0;
 let failed = 0;
@@ -1745,6 +1745,830 @@ test("RNN initial hidden gradient numerical check", () => {
 
     h0.data[0] = original - eps;
     const minus = calculateLoss();
+
+    h0.data[0] = original;
+
+    const numerical = (plus - minus) / (2 * eps);
+
+    assert(
+        Math.abs(analytical - numerical) < 1e-2,
+        `Analytical: ${analytical}, Numerical: ${numerical}`
+    );
+});
+
+// 1. Forward output shape
+test("GRUCell output shape", () => {
+    const gru = new GRUCell(3, 4);
+
+    const x = makeTensor(
+        Array(6).fill(0.2), [2, 3], false
+    );
+
+    const h = makeTensor(
+        Array(8).fill(0.3), [2, 4], false
+    );
+
+    const output = gru.forward(x, h);
+
+    assert(
+        JSON.stringify(output.shape) === JSON.stringify([2, 4]),
+        `Unexpected shape: ${output.shape}`
+    );
+});
+
+// 2. Forward output contains finite values
+test("GRUCell output finite values", () => {
+    const gru = new GRUCell(3, 4);
+
+    const x = makeTensor(
+        [0.1, 0.2, 0.3], [1, 3], false
+    );
+
+    const h = makeTensor(
+        [0.2, 0.3, 0.4, 0.5], [1, 4], false
+    );
+
+    const output = gru.forward(x, h);
+
+    for (const value of output.data) {
+        assert(Number.isFinite(value), "Output contains non-finite value");
+    }
+});
+
+// 3. Batch independence
+test("GRUCell batch independence", () => {
+    const gru = new GRUCell(2, 2);
+
+    const x = makeTensor(
+        [0.1, 0.2, 0.3, 0.4], [2, 2], false
+    );
+
+    const h = makeTensor(
+        [0.5, 0.6, 0.7, 0.8], [2, 2], false
+    );
+
+    const batched = gru.forward(x, h);
+
+    const x0 = makeTensor([0.1, 0.2], [1, 2], false);
+    const h0 = makeTensor([0.5, 0.6], [1, 2], false);
+
+    const x1 = makeTensor([0.3, 0.4], [1, 2], false);
+    const h1 = makeTensor([0.7, 0.8], [1, 2], false);
+
+    const out0 = gru.forward(x0, h0);
+    const out1 = gru.forward(x1, h1);
+
+    for (let i = 0; i < 2; i++) {
+        assert(Math.abs(batched.data[i] - out0.data[i]) < 1e-5);
+        assert(Math.abs(batched.data[i + 2] - out1.data[i]) < 1e-5);
+    }
+});
+
+// 4. Hidden state is not mutated
+test("GRUCell does not mutate hidden state", () => {
+    const gru = new GRUCell(2, 2);
+
+    const x = makeTensor([0.1, 0.2], [1, 2], false);
+    const h = makeTensor([0.3, 0.4], [1, 2], false);
+
+    const original = Array.from(h.data);
+
+    gru.forward(x, h);
+
+    assert(
+        h.data.every((v, i) => v === original[i]),
+        "Hidden state was mutated"
+    );
+});
+
+// 5. Gradients flow to input and hidden state
+test("GRUCell backward through input and hidden state", () => {
+    const gru = new GRUCell(2, 2);
+
+    const x = makeTensor([0.1, 0.2], [1, 2], true);
+    const h = makeTensor([0.3, 0.4], [1, 2], true);
+
+    const output = gru.forward(x, h);
+    output.sum().backward();
+
+    for (const value of x.grad.data) {
+        assert(Number.isFinite(value), "Invalid input gradient");
+    }
+
+    for (const value of h.grad.data) {
+        assert(Number.isFinite(value), "Invalid hidden gradient");
+    }
+});
+
+// 6. Gradients reach all six Linear layers
+test("GRUCell gradients reach all Linear layers", () => {
+    const gru = new GRUCell(2, 2);
+
+    const x = makeTensor([0.1, 0.2], [1, 2], true);
+    const h = makeTensor([0.3, 0.4], [1, 2], true);
+
+    gru.forward(x, h).sum().backward();
+
+    const layers = [
+        gru.xz, gru.hz,
+        gru.xr, gru.hr,
+        gru.xn, gru.hn
+    ];
+
+    for (const layer of layers) {
+        assert(layer.w.grad !== null, "Missing weight gradient");
+        assert(layer.b.grad !== null, "Missing bias gradient");
+
+        for (const value of layer.w.grad.data) {
+            assert(Number.isFinite(value), "Invalid weight gradient");
+        }
+
+        for (const value of layer.b.grad.data) {
+            assert(Number.isFinite(value), "Invalid bias gradient");
+        }
+    }
+});
+
+// 7. Gradients from candidate hidden state
+test("GRUCell candidate path gradients", () => {
+    const gru = new GRUCell(2, 2);
+
+    const x = makeTensor([0.2, 0.4], [1, 2], true);
+    const h = makeTensor([0.3, 0.5], [1, 2], true);
+
+    gru.forward(x, h).sum().backward();
+
+    assert(gru.xn.w.grad !== null);
+    assert(gru.hn.w.grad !== null);
+});
+
+// 8. Gradients from update gate
+test("GRUCell update gate gradients", () => {
+    const gru = new GRUCell(2, 2);
+
+    const x = makeTensor([0.2, 0.4], [1, 2], true);
+    const h = makeTensor([0.3, 0.5], [1, 2], true);
+
+    gru.forward(x, h).sum().backward();
+
+    assert(gru.xz.w.grad !== null);
+    assert(gru.hz.w.grad !== null);
+});
+
+// 9. Gradients from reset gate
+test("GRUCell reset gate gradients", () => {
+    const gru = new GRUCell(2, 2);
+
+    const x = makeTensor([0.2, 0.4], [1, 2], true);
+    const h = makeTensor([0.3, 0.5], [1, 2], true);
+
+    gru.forward(x, h).sum().backward();
+
+    assert(gru.xr.w.grad !== null);
+    assert(gru.hr.w.grad !== null);
+});
+
+// 10. Numerical gradient check for input
+test("GRUCell input gradient numerical check", () => {
+    const gru = new GRUCell(2, 2);
+
+    const x = makeTensor([0.2, 0.4], [1, 2], true);
+    const h = makeTensor([0.3, 0.5], [1, 2], false);
+
+    gru.forward(x, h).sum().backward();
+
+    const analytical = x.grad.data[0];
+    const original = x.data[0];
+    const eps = 1e-3;
+
+    function loss() {
+        return gru.forward(x, h).data.reduce((a, b) => a + b, 0);
+    }
+
+    x.data[0] = original + eps;
+    const plus = loss();
+
+    x.data[0] = original - eps;
+    const minus = loss();
+
+    x.data[0] = original;
+
+    const numerical = (plus - minus) / (2 * eps);
+
+    assert(
+        Math.abs(analytical - numerical) < 1e-2,
+        `Analytical: ${analytical}, Numerical: ${numerical}`
+    );
+});
+
+// 11. Numerical gradient check for hidden state
+test("GRUCell hidden gradient numerical check", () => {
+    const gru = new GRUCell(2, 2);
+
+    const x = makeTensor([0.2, 0.4], [1, 2], false);
+    const h = makeTensor([0.3, 0.5], [1, 2], true);
+
+    gru.forward(x, h).sum().backward();
+
+    const analytical = h.grad.data[0];
+    const original = h.data[0];
+    const eps = 1e-3;
+
+    function loss() {
+        return gru.forward(x, h).data.reduce((a, b) => a + b, 0);
+    }
+
+    h.data[0] = original + eps;
+    const plus = loss();
+
+    h.data[0] = original - eps;
+    const minus = loss();
+
+    h.data[0] = original;
+
+    const numerical = (plus - minus) / (2 * eps);
+
+    assert(
+        Math.abs(analytical - numerical) < 1e-2,
+        `Analytical: ${analytical}, Numerical: ${numerical}`
+    );
+});
+
+// 12. Numerical gradient check for candidate recurrent weights
+test("GRUCell candidate recurrent weight gradient numerical check", () => {
+    const gru = new GRUCell(2, 2);
+
+    const x = makeTensor([0.2, 0.4], [1, 2], false);
+    const h = makeTensor([0.3, 0.5], [1, 2], false);
+
+    gru.forward(x, h).sum().backward();
+
+    const analytical = gru.hn.w.grad.data[0];
+    const original = gru.hn.w.data[0];
+    const eps = 1e-3;
+
+    function loss() {
+        return gru.forward(x, h).data.reduce((a, b) => a + b, 0);
+    }
+
+    gru.hn.w.data[0] = original + eps;
+    const plus = loss();
+
+    gru.hn.w.data[0] = original - eps;
+    const minus = loss();
+
+    gru.hn.w.data[0] = original;
+
+    const numerical = (plus - minus) / (2 * eps);
+
+    assert(
+        Math.abs(analytical - numerical) < 1e-2,
+        `Analytical: ${analytical}, Numerical: ${numerical}`
+    );
+});
+
+// 13. Zero-sized batch
+test("GRUCell zero-sized batch", () => {
+    const gru = new GRUCell(3, 4);
+
+    const x = makeTensor([], [0, 3], false);
+    const h = makeTensor([], [0, 4], false);
+
+    const output = gru.forward(x, h);
+
+    assert(
+        JSON.stringify(output.shape) === JSON.stringify([0, 4]),
+        `Unexpected shape: ${output.shape}`
+    );
+
+    assert(output.numel === 0);
+});
+
+// 14. Bias disabled
+test("GRUCell without bias", () => {
+    const gru = new GRUCell(2, 2, false);
+
+    const x = makeTensor([0.1, 0.2], [1, 2], true);
+    const h = makeTensor([0.3, 0.4], [1, 2], true);
+
+    const output = gru.forward(x, h);
+
+    assert(JSON.stringify(output.shape) === JSON.stringify([1, 2]));
+
+    output.sum().backward();
+
+    const layers = [
+        gru.xz, gru.hz,
+        gru.xr, gru.hr,
+        gru.xn, gru.hn
+    ];
+
+    for (const layer of layers) {
+        assert(layer.b === null, "Bias should be disabled");
+        assert(layer.w.grad !== null, "Weight gradient missing");
+    }
+});
+
+// 1. Forward output shape
+test("GRU output shape", () => {
+    const gru = new GRU(4, 5);
+
+    const input = makeTensor(
+        Array(24).fill(0.2),
+        [3, 2, 4],
+        false
+    );
+
+    const [output, hn] = gru.forward(input);
+
+    assert(
+        JSON.stringify(output.shape) === JSON.stringify([3, 2, 5])
+    );
+
+    assert(
+        JSON.stringify(hn.shape) === JSON.stringify([2, 5])
+    );
+});
+
+
+// 2. Output contains finite values
+test("GRU output finite values", () => {
+    const gru = new GRU(2, 3);
+
+    const input = makeTensor(
+        [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        [3, 1, 2],
+        false
+    );
+
+    const [output, hn] = gru.forward(input);
+
+    for (const value of output.data) {
+        assert(Number.isFinite(value));
+    }
+
+    for (const value of hn.data) {
+        assert(Number.isFinite(value));
+    }
+});
+
+
+// 3. Final hidden equals last output
+test("GRU final hidden equals last output timestep", () => {
+    const gru = new GRU(2, 3);
+
+    const input = makeTensor(
+        Array(12).fill(0.3),
+        [3, 2, 2],
+        false
+    );
+
+    const [output, hn] = gru.forward(input);
+
+    const offset = (3 - 1) * 2 * 3;
+
+    for (let i = 0; i < hn.numel; i++) {
+        assert(
+            Math.abs(hn.data[i] - output.data[offset + i]) < 1e-6,
+            `Mismatch at ${i}: hn=${hn.data[i]}, output=${output.data[offset + i]}`
+        );
+    }
+});
+
+
+// 4. Explicit initial hidden state
+test("GRU accepts explicit initial hidden state", () => {
+    const gru = new GRU(2, 3);
+
+    const input = makeTensor(
+        Array(12).fill(0.2),
+        [3, 2, 2],
+        false
+    );
+
+    const h0 = makeTensor(
+        Array(6).fill(0.4),
+        [2, 3],
+        false
+    );
+
+    const [output, hn] = gru.forward(input, h0);
+
+    assert(JSON.stringify(output.shape) === JSON.stringify([3, 2, 3]));
+    assert(JSON.stringify(hn.shape) === JSON.stringify([2, 3]));
+});
+
+
+// 5. Automatic hidden state initialization
+test("GRU initializes zero hidden state", () => {
+    const gru = new GRU(2, 3);
+
+    const input = makeTensor(
+        Array(12).fill(0.2),
+        [3, 2, 2],
+        false
+    );
+
+    const zeroH0 = makeTensor(
+        Array(6).fill(0),
+        [2, 3],
+        false
+    );
+
+    const [automatic] = gru.forward(input);
+    const [explicit] = gru.forward(input, zeroH0);
+
+    for (let i = 0; i < automatic.numel; i++) {
+        assert(
+            Math.abs(automatic.data[i] - explicit.data[i]) < 1e-6
+        );
+    }
+});
+
+
+// 6. Batch independence
+test("GRU batch independence", () => {
+    const gru = new GRU(2, 3);
+
+    const input = makeTensor(
+        [
+            0.1, 0.2, 0.3, 0.4,
+            0.5, 0.6, 0.7, 0.8,
+            0.9, 1.0, 1.1, 1.2
+        ],
+        [3, 2, 2],
+        false
+    );
+
+    const [batched] = gru.forward(input);
+
+    for (let b = 0; b < 2; b++) {
+        const single = input
+            .slice(":", `${b}:${b + 1}`, ":");
+
+        const [individual] = gru.forward(single);
+
+        for (let t = 0; t < 3; t++) {
+            for (let j = 0; j < 3; j++) {
+                const batchedIndex = t * 6 + b * 3 + j;
+                const individualIndex = t * 3 + j;
+
+                assert(
+                    Math.abs(
+                        batched.data[batchedIndex] -
+                        individual.data[individualIndex]
+                    ) < 1e-5
+                );
+            }
+        }
+    }
+});
+
+
+// 7. Hidden state resets between forward calls
+test("GRU resets hidden state between forward calls", () => {
+    const gru = new GRU(2, 3);
+
+    const input = makeTensor(
+        Array(12).fill(0.2),
+        [3, 2, 2],
+        false
+    );
+
+    const [first] = gru.forward(input);
+    const [second] = gru.forward(input);
+
+    for (let i = 0; i < first.numel; i++) {
+        assert(
+            Math.abs(first.data[i] - second.data[i]) < 1e-6
+        );
+    }
+});
+
+
+// 8. Hidden state is not mutated
+test("GRU does not mutate initial hidden state", () => {
+    const gru = new GRU(2, 3);
+
+    const input = makeTensor(
+        Array(12).fill(0.2),
+        [3, 2, 2],
+        false
+    );
+
+    const h0 = makeTensor(
+        [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        [2, 3],
+        false
+    );
+
+    const original = Array.from(h0.data);
+
+    gru.forward(input, h0);
+
+    for (let i = 0; i < h0.numel; i++) {
+        assert(h0.data[i] === original[i]);
+    }
+});
+
+
+// 9. Non-contiguous input
+test("GRU supports non-contiguous input", () => {
+    const gru = new GRU(4, 5);
+
+    const base = makeTensor(
+        Array.from({ length: 24 }, (_, i) => i * 0.1),
+        [2, 3, 4],
+        false
+    );
+
+    const input = base.permute(1, 0, 2);
+
+    assert(
+        input.isContiguous() === false,
+        "Expected non-contiguous input"
+    );
+
+    const values = [];
+
+    for (let t = 0; t < 3; t++) {
+        for (let b = 0; b < 2; b++) {
+            for (let f = 0; f < 4; f++) {
+                const index = (b * 3 + t) * 4 + f;
+                values.push(base.data[index]);
+            }
+        }
+    }
+
+    const reference = makeTensor(values, [3, 2, 4], false);
+
+    assert(reference.isContiguous(), "Reference should be contiguous");
+
+    const [output1, hn1] = gru.forward(input);
+    const [output2, hn2] = gru.forward(reference);
+
+    for (let i = 0; i < output1.numel; i++) {
+        assert(
+            Math.abs(output1.data[i] - output2.data[i]) < 1e-5,
+            `Output mismatch at ${i}`
+        );
+    }
+
+    for (let i = 0; i < hn1.numel; i++) {
+        assert(
+            Math.abs(hn1.data[i] - hn2.data[i]) < 1e-5,
+            `Hidden mismatch at ${i}`
+        );
+    }
+});
+
+
+// 10. Backward through all timesteps
+test("GRU backward through all timesteps", () => {
+    const gru = new GRU(2, 3);
+
+    const input = makeTensor(
+        Array(12).fill(0.2),
+        [3, 2, 2],
+        true
+    );
+
+    const [output] = gru.forward(input);
+
+    output.sum().backward();
+
+    for (const value of input.grad.data) {
+        assert(Number.isFinite(value));
+    }
+
+    const layers = [
+        gru.cell.xz,
+        gru.cell.hz,
+        gru.cell.xr,
+        gru.cell.hr,
+        gru.cell.xn,
+        gru.cell.hn
+    ];
+
+    for (const layer of layers) {
+        assert(layer.w.grad !== null);
+        assert(layer.b.grad !== null);
+    }
+});
+
+
+// 11. Gradient flows into initial hidden state
+test("GRU initial hidden state gradient", () => {
+    const gru = new GRU(2, 3);
+
+    const input = makeTensor(
+        Array(12).fill(0.2),
+        [3, 2, 2],
+        false
+    );
+
+    const h0 = makeTensor(
+        Array(6).fill(0.3),
+        [2, 3],
+        true
+    );
+
+    const [output] = gru.forward(input, h0);
+
+    output.sum().backward();
+
+    for (const value of h0.grad.data) {
+        assert(Number.isFinite(value));
+    }
+});
+
+
+// 12. Final hidden state backward
+test("GRU final hidden backward", () => {
+    const gru = new GRU(2, 3);
+
+    const input = makeTensor(
+        Array(12).fill(0.2),
+        [3, 2, 2],
+        true
+    );
+
+    const h0 = makeTensor(
+        Array(6).fill(0.3),
+        [2, 3],
+        true
+    );
+
+    const [, hn] = gru.forward(input, h0);
+
+    hn.sum().backward();
+
+    for (const value of input.grad.data) {
+        assert(Number.isFinite(value));
+    }
+
+    for (const value of h0.grad.data) {
+        assert(Number.isFinite(value));
+    }
+});
+
+
+// 13. Empty sequence
+test("GRU empty sequence", () => {
+    const gru = new GRU(2, 3);
+
+    const input = makeTensor([], [0, 2, 2], false);
+
+    const [output, hn] = gru.forward(input);
+
+    assert(JSON.stringify(output.shape) === JSON.stringify([0, 2, 3]));
+    assert(JSON.stringify(hn.shape) === JSON.stringify([2, 3]));
+
+    assert(output.numel === 0);
+
+    for (const value of hn.data) {
+        assert(value === 0);
+    }
+});
+
+
+// 14. Empty sequence with explicit hidden state
+test("GRU empty sequence preserves initial hidden state", () => {
+    const gru = new GRU(2, 3);
+
+    const input = makeTensor([], [0, 2, 2], false);
+
+    const h0 = makeTensor(
+        [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        [2, 3],
+        false
+    );
+
+    const [output, hn] = gru.forward(input, h0);
+
+    assert(output.numel === 0);
+
+    for (let i = 0; i < h0.numel; i++) {
+        assert(hn.data[i] === h0.data[i]);
+    }
+});
+
+
+// 15. Zero-sized batch
+test("GRU zero-sized batch", () => {
+    const gru = new GRU(2, 3);
+
+    const input = makeTensor([], [3, 0, 2], false);
+
+    const [output, hn] = gru.forward(input);
+
+    assert(JSON.stringify(output.shape) === JSON.stringify([3, 0, 3]));
+    assert(JSON.stringify(hn.shape) === JSON.stringify([0, 3]));
+
+    assert(output.numel === 0);
+    assert(hn.numel === 0);
+});
+
+
+// 16. Sequence length one
+test("GRU sequence length one", () => {
+    const gru = new GRU(2, 3);
+
+    const input = makeTensor(
+        [0.1, 0.2, 0.3, 0.4],
+        [1, 2, 2],
+        false
+    );
+
+    const h0 = makeTensor(
+        Array(6).fill(0.2),
+        [2, 3],
+        false
+    );
+
+    const [output, hn] = gru.forward(input, h0);
+
+    const x = input.squeeze(0);
+    const expected = gru.cell.forward(x, h0);
+
+    assert(JSON.stringify(output.shape) === JSON.stringify([1, 2, 3]));
+
+    for (let i = 0; i < hn.numel; i++) {
+        assert(Math.abs(hn.data[i] - expected.data[i]) < 1e-6);
+    }
+});
+
+
+// 17. Numerical gradient check for input
+test("GRU input gradient numerical check", () => {
+    const gru = new GRU(2, 2);
+
+    const input = makeTensor(
+        [0.2, 0.4, 0.6, 0.8],
+        [2, 1, 2],
+        true
+    );
+
+    const [output] = gru.forward(input);
+    output.sum().backward();
+
+    const analytical = input.grad.data[0];
+    const original = input.data[0];
+    const eps = 1e-3;
+
+    function loss() {
+        return gru.forward(input)[0].data.reduce((a, b) => a + b, 0);
+    }
+
+    input.data[0] = original + eps;
+    const plus = loss();
+
+    input.data[0] = original - eps;
+    const minus = loss();
+
+    input.data[0] = original;
+
+    const numerical = (plus - minus) / (2 * eps);
+
+    assert(
+        Math.abs(analytical - numerical) < 1e-2,
+        `Analytical: ${analytical}, Numerical: ${numerical}`
+    );
+});
+
+
+// 18. Numerical gradient check for initial hidden state
+test("GRU initial hidden gradient numerical check", () => {
+    const gru = new GRU(2, 2);
+
+    const input = makeTensor(
+        [0.2, 0.4, 0.6, 0.8],
+        [2, 1, 2],
+        false
+    );
+
+    const h0 = makeTensor(
+        [0.3, 0.5],
+        [1, 2],
+        true
+    );
+
+    const [output] = gru.forward(input, h0);
+    output.sum().backward();
+
+    const analytical = h0.grad.data[0];
+    const original = h0.data[0];
+    const eps = 1e-3;
+
+    function loss() {
+        return gru.forward(input, h0)[0].data.reduce((a, b) => a + b, 0);
+    }
+
+    h0.data[0] = original + eps;
+    const plus = loss();
+
+    h0.data[0] = original - eps;
+    const minus = loss();
 
     h0.data[0] = original;
 

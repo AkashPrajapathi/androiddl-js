@@ -217,7 +217,7 @@ export class Tensor {
 
         let x;
 
-        if (this.#isContiguous(this.shape, this.strides)) {
+        if (this.isContiguous()) {
             x = new Tensor(this.data, shape);
             x.strides = this.#calculateStrides(shape);
             x.offset = this.offset;
@@ -395,7 +395,9 @@ export class Tensor {
         return new StackOp().apply(tensors, dim);
     }
 
-    #isContiguous(shape, strides) {
+    isContiguous() {
+        let shape = this.shape
+        let strides = this.strides
         let expectedStride = 1
 
         for (let i = shape.length - 1; i >= 0; i--) {
