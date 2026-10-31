@@ -2,9 +2,9 @@
 
 **A PyTorch-inspired deep learning library built from scratch in JavaScript.**
 
-AndroidDL.js brings tensor computation, automatic differentiation, neural network modules, loss functions, and optimization to JavaScript.
+AndroidDL.js brings tensor computation, automatic differentiation, neural network modules, loss functions, probability distributions, and optimization to JavaScript.
 
-Inspired by PyTorch, the project explores how deep learning frameworks work internally—from tensor operations and computation graphs to trainable parameters and neural network training.
+Inspired by PyTorch, the project explores how deep learning frameworks work internally—from tensor operations and computation graphs to trainable parameters and recurrent neural network architectures.
 
 - **Language:** JavaScript (ES Modules)
 - **Package:** `@AkashPrajapathi/androiddl-js`
@@ -12,6 +12,8 @@ Inspired by PyTorch, the project explores how deep learning frameworks work inte
 - **Build tool:** Vite
 
 [GitHub Repository](https://github.com/AkashPrajapathi/androiddl-js) · [GitHub Package](https://github.com/AkashPrajapathi/androiddl-js/pkgs/npm/androiddl-js)
+
+---
 
 ## Downloads
 
@@ -27,6 +29,8 @@ You can download the prebuilt library files from the release assets or build the
 
 For npm installation, see the [Installation](#installation) section below.
 
+---
+
 ## 🐍 Snake AI — Live Demo
 
 See **AndroidDL.js in action** by running a trained Snake AI model directly in your browser.
@@ -36,22 +40,30 @@ See **AndroidDL.js in action** by running a trained Snake AI model directly in y
 The demo loads trained model weights and runs inference using AndroidDL.js—no Python or server-side inference required.
 
 ### Features
+
 - 🧠 Trained neural network inference in the browser
 - ⚡ JavaScript-powered model execution
 - 🎮 Play Snake with an AI agent
 - 📦 Powered by AndroidDL.js
 
-
+---
 
 ## Features
 
-- **Tensor computation:** Multidimensional tensors, shape and stride management, broadcasting, and matrix multiplication.
-- **Automatic differentiation:** Gradient tracking and reverse-mode backpropagation.
+- **Tensor computation:** Multidimensional tensors with shape, stride, and storage-offset management.
+- **Tensor operations:** Arithmetic, broadcasting, matrix multiplication, and reduction operations.
+- **Tensor manipulation:** Slicing, concatenation, stacking, squeezing, unsqueezing, reshaping, and permutation.
+- **Non-contiguous tensors:** Strided tensor views and operations on non-contiguous data.
+- **Automatic differentiation:** Gradient tracking and reverse-mode automatic differentiation.
 - **Neural networks:** Build custom models using modules, linear layers, and activation functions.
+- **Recurrent neural networks:** RNN, GRU, and LSTM cells and sequence models.
 - **Loss functions:** Mean squared error and cross-entropy loss.
 - **Optimization:** Stochastic gradient descent with momentum support.
+- **Probability distributions:** Categorical distribution for discrete sampling.
 - **Modular architecture:** Compose reusable neural network components.
 - **Browser support:** Use the generated JavaScript builds directly in browser applications.
+
+---
 
 ## Installation
 
@@ -76,8 +88,12 @@ Import the library in JavaScript:
 ```javascript
 import {
   Tensor,
+  Module,
   Linear,
-  ReLU
+  ReLU,
+  RNN,
+  GRU,
+  LSTM
 } from "@AkashPrajapathi/androiddl-js";
 ```
 
@@ -126,25 +142,7 @@ Serve the page through a local development server rather than opening the HTML f
 
 **Build output:** The current Vite configuration generates `dist/androiddl.js` and `dist/androiddl.umd.cjs`. The examples above use the ES module build.
 
-### Option 3: Use a CDN
-
-If you want to import AndroidDL.js from a CDN, use a CDN that supports GitHub Packages and can resolve the package's module entry point and dependencies.
-
-For example, you can try:
-
-```html
-<script type="module">
-  import {
-    Tensor,
-    Linear
-  } from "https://esm.sh/@AkashPrajapathi/androiddl-js";
-
-  const layer = new Linear(2, 3);
-  console.log(layer);
-</script>
-```
-
-CDN availability depends on package metadata and registry access. If the CDN cannot resolve the package, use the local browser build instead.
+---
 
 ## Quick Start
 
@@ -239,20 +237,73 @@ This model accepts two input features, processes them through a hidden layer wit
 
 Extend `Module` and implement `forward()` to define your own models.
 
-## Core Components
+---
 
-### Tensor
+## Tensor API
 
-`Tensor` is the foundation of AndroidDL.js. It provides numerical storage and operations for multidimensional data.
+`Tensor` is the foundation of AndroidDL.js. It provides numerical storage, multidimensional indexing, tensor operations, and automatic differentiation.
 
-Operations include:
+### Creating tensors
 
-- Element-wise arithmetic
-- Broadcasting
-- Matrix multiplication
-- Reshape, permute, and transpose
-- Reduction operations
-- Gradient tracking and backpropagation
+The Tensor constructor accepts data, shape, and an optional gradient-tracking argument.
+
+```javascript
+const x = new Tensor(
+  [
+    [1, 2, 3],
+    [4, 5, 6]
+  ],
+  [2, 3],
+  true
+);
+```
+
+The third argument enables gradient tracking.
+
+### Tensor properties
+
+| Property | Description |
+|---|---|
+| `data` | Underlying numerical storage |
+| `shape` | Dimensions of the tensor |
+| `strides` | Memory steps used to access tensor elements |
+| `offset` | Starting storage position of the tensor view |
+| `numel` | Total number of elements |
+| `grad` | Gradient accumulated during backpropagation |
+
+### Arithmetic operations
+
+| Method | Description |
+|---|---|
+| `add()` | Element-wise addition |
+| `sub()` | Element-wise subtraction |
+| `mul()` | Element-wise multiplication |
+| `div()` | Element-wise division |
+| `matmul()` | Matrix multiplication |
+
+Arithmetic operations support tensor broadcasting where applicable.
+
+Example:
+
+```javascript
+const a = new Tensor([1, 2, 3], [3]);
+const b = new Tensor([10], [1]);
+
+const result = a.add(b);
+
+console.log(result);
+```
+
+### Tensor manipulation
+
+| Method | Description |
+|---|---|
+| `reshape()` | Changes tensor shape |
+| `permute()` | Reorders tensor dimensions |
+| `transpose()` | Swaps two tensor dimensions |
+| `slice()` | Selects ranges of elements along tensor dimensions |
+| `squeeze()` | Removes dimensions of size one |
+| `unsqueeze()` | Inserts dimensions of size one |
 
 Example:
 
@@ -267,10 +318,87 @@ const x = new Tensor(
 
 const transposed = x.transpose(0, 1);
 const reshaped = x.reshape([3, 2]);
+const expanded = x.unsqueeze(0);
 
 console.log(transposed.shape);
 console.log(reshaped.shape);
+console.log(expanded.shape);
 ```
+
+### Slicing
+
+AndroidDL.js supports multidimensional slicing with positive and negative steps.
+
+The slicing API supports:
+
+- Selecting ranges using start and stop indices.
+- Skipping elements using positive steps.
+- Reversing dimensions using negative steps.
+- Slicing multiple dimensions.
+- Creating strided views over existing tensor storage.
+
+Examples:
+
+```javascript
+const x = new Tensor(
+  [0, 1, 2, 3, 4, 5],
+  [6]
+);
+
+// Select indices 1, 2, and 3
+const a = x.slice("1:4");
+
+// Select every second element
+const b = x.slice("0:6:2");
+
+// Reverse the tensor
+const c = x.slice("::-1");
+```
+
+Slicing is designed around tensor shape, strides, and storage offsets rather than requiring every selection to copy the underlying data.
+
+### Reduction operations
+
+| Method | Description |
+|---|---|
+| `sum()` | Computes the sum of tensor elements |
+| `mean()` | Computes the mean |
+| `min()` | Computes the minimum |
+| `max()` | Computes the maximum |
+
+Reduction operations can be used to calculate aggregate values and build loss functions.
+
+### Mathematical operations
+
+| Method | Description |
+|---|---|
+| `exp()` | Element-wise exponential |
+| `log()` | Element-wise natural logarithm |
+| `tanh()` | Hyperbolic tangent |
+
+### Automatic differentiation methods
+
+| Method | Description |
+|---|---|
+| `backward()` | Propagates gradients through the computation graph |
+| `detach()` | Creates a tensor detached from gradient tracking |
+
+AndroidDL.js uses reverse-mode automatic differentiation to calculate gradients through supported tensor operations.
+
+### Tensor composition
+
+AndroidDL.js supports combining multiple tensors.
+
+| Operation | Description |
+|---|---|
+| `concatenate` | Joins tensors along an existing dimension |
+| `stack` | Combines tensors along a new dimension |
+
+Concatenation and stacking support multidimensional tensors and are designed to work with non-contiguous inputs.
+
+---
+
+## Core Neural Network Components
 
 ### Module
 
@@ -280,6 +408,7 @@ console.log(reshaped.shape);
 class MyModel extends Module {
   constructor() {
     super();
+
     this.layer = new Linear(4, 2);
   }
 
@@ -300,7 +429,11 @@ Use `model.call(input)` to execute the forward pass and `model.parameters()` to 
 
 ```javascript
 const layer = new Linear(4, 2);
-const input = new Tensor([[1, 2, 3, 4]], [1, 4]);
+
+const input = new Tensor(
+  [[1, 2, 3, 4]],
+  [1, 4]
+);
 
 const output = layer.call(input);
 ```
@@ -327,24 +460,165 @@ const model = new Sequential(
 
 ### Activation functions
 
-| Module    | Purpose                       |
-| --------- | ----------------------------- |
-| `ReLU`    | Rectified linear activation   |
-| `Sigmoid` | Sigmoid activation            |
-| `Tanh`    | Hyperbolic tangent activation |
-| `Softmax` | Softmax activation            |
+| Module | Purpose |
+|---|---|
+| `ReLU` | Rectified linear activation |
+| `Sigmoid` | Sigmoid activation |
+| `Tanh` | Hyperbolic tangent activation |
+| `Softmax` | Softmax activation |
 
 ### Parameter
 
-`Parameter` represents trainable model parameters. Modules expose parameters through `parameters()`, allowing optimizers to update them during training.
+`Parameter` represents trainable model parameters.
+
+Modules expose parameters through `parameters()`, allowing optimizers to update them during training.
+
+---
+
+## Recurrent Neural Networks
+
+AndroidDL.js includes three major recurrent neural network architectures:
+
+- Recurrent Neural Network (RNN)
+- Gated Recurrent Unit (GRU)
+- Long Short-Term Memory (LSTM)
+
+These architectures process sequential data by maintaining hidden states across timesteps.
+
+### RNN
+
+A vanilla recurrent neural network processes a sequence one timestep at a time.
+
+Available components:
+
+- `RNNCell`
+- `RNN`
+
+The recurrent cell calculates a new hidden state using the current input and previous hidden state.
+
+### GRU
+
+The Gated Recurrent Unit uses update and reset gates to control information flow through the recurrent network.
+
+Available components:
+
+- `GRUCell`
+- `GRU`
+
+The GRU architecture provides gated state updates without maintaining a separate cell state.
+
+### LSTM
+
+The Long Short-Term Memory network uses a hidden state and a separate cell state to manage information across timesteps.
+
+Available components:
+
+- `LSTMCell`
+- `LSTM`
+
+The LSTM cell uses four gates:
+
+- **Forget gate:** Controls which information is retained from the previous cell state.
+- **Input gate:** Controls how much new information enters the cell state.
+- **Candidate state:** Generates candidate information for the cell state.
+- **Output gate:** Controls the information exposed through the hidden state.
+
+### Working with sequences
+
+The sequence models accept input tensors with the following layout:
+
+```text
+[sequence_length, batch_size, input_size]
+```
+
+For example, an input tensor with shape `[10, 4, 8]` represents:
+
+- 10 timesteps
+- 4 sequences in a batch
+- 8 features per timestep
+
+Each sequence model reuses its recurrent cell across timesteps.
+
+### Sequence model outputs
+
+The recurrent sequence models return their outputs and final states:
+
+| Model | Forward result | Description |
+|---|---|---|
+| `RNN` | `[output, hn]` | Sequence output and final hidden state |
+| `GRU` | `[output, hn]` | Sequence output and final hidden state |
+| `LSTM` | `[output, hn, cn]` | Sequence output, final hidden state, and final cell state |
+
+For these models:
+
+- `output` contains the hidden state at every timestep.
+- `hn` contains the final hidden state.
+- `cn` contains the final cell state for LSTM.
+
+The sequence output has shape:
+
+```text
+[sequence_length, batch_size, hidden_size]
+```
+
+The final hidden state has shape:
+
+```text
+[batch_size, hidden_size]
+```
+
+The LSTM final cell state has the same shape:
+
+```text
+[batch_size, hidden_size]
+```
+
+### Example: LSTM
+
+```javascript
+import {
+  Tensor,
+  LSTM
+} from "@AkashPrajapathi/androiddl-js";
+
+const sequenceLength = 10;
+const batchSize = 4;
+const inputSize = 8;
+const hiddenSize = 16;
+
+const model = new LSTM(inputSize, hiddenSize);
+
+const input = new Tensor(
+  new Float32Array(sequenceLength * batchSize * inputSize),
+  [sequenceLength, batchSize, inputSize]
+);
+
+const [output, hn, cn] = model.call(input);
+
+console.log(output.shape);
+console.log(hn.shape);
+console.log(cn.shape);
+```
+
+Expected shapes:
+
+```text
+output: [10, 4, 16]
+hn:     [4, 16]
+cn:     [4, 16]
+```
+
+RNN, GRU, and LSTM make AndroidDL.js suitable for experimenting with sequence modelling, time-series data, and recurrent neural network architectures.
+
+---
 
 ## Training Components
 
 ### Loss functions
 
-| Class              | Purpose            |
-| ------------------ | ------------------ |
-| `MSELoss`          | Mean squared error |
+| Class | Purpose |
+|---|---|
+| `MSELoss` | Mean squared error |
 | `CrossEntropyLoss` | Cross-entropy loss |
 
 Example:
@@ -387,24 +661,101 @@ A typical training workflow consists of:
 
 Refer to the repository's examples for the precise optimizer lifecycle and gradient-reset API.
 
+### Categorical distribution
+
+`Categorical` provides a probability distribution for discrete outcomes.
+
+It can be used in experiments involving probabilistic action selection and reinforcement learning.
+
+---
+
 ## Public API
 
-The following components are exposed through the public entry point:
+AndroidDL.js exposes the following components through its main entry point.
 
-| Export             | Description                                     |
-| ------------------ | ----------------------------------------------- |
-| `Tensor`           | Numerical data, tensor operations, and autograd |
-| `Parameter`        | Trainable parameters                            |
-| `Module`           | Base class for neural network modules           |
-| `Linear`           | Fully connected layer                           |
-| `Sequential`       | Sequential module composition                   |
-| `ReLU`             | ReLU activation                                 |
-| `Sigmoid`          | Sigmoid activation                              |
-| `Tanh`             | Tanh activation                                 |
-| `Softmax`          | Softmax activation                              |
-| `SGD`              | Stochastic gradient descent optimizer           |
-| `MSELoss`          | Mean squared error loss                         |
-| `CrossEntropyLoss` | Cross-entropy loss                              |
+### Core
+
+| Export | Description |
+|---|---|
+| `Tensor` | Multidimensional tensor computation and automatic differentiation |
+| `Parameter` | Trainable neural network parameters |
+
+### Neural Network Modules
+
+| Export | Description |
+|---|---|
+| `Module` | Base class for neural network modules |
+| `Linear` | Fully connected neural network layer |
+| `Sequential` | Sequential composition of neural network modules |
+| `ReLU` | Rectified linear activation |
+| `Sigmoid` | Sigmoid activation |
+| `Tanh` | Hyperbolic tangent activation |
+| `Softmax` | Softmax activation |
+
+### Recurrent Neural Networks
+
+| Export | Description |
+|---|---|
+| `RNNCell` | Vanilla recurrent neural network cell |
+| `RNN` | Sequence-based vanilla recurrent neural network |
+| `GRUCell` | Gated Recurrent Unit cell |
+| `GRU` | Sequence-based GRU network |
+| `LSTMCell` | Long Short-Term Memory cell |
+| `LSTM` | Sequence-based LSTM network |
+
+### Loss Functions
+
+| Export | Description |
+|---|---|
+| `MSELoss` | Mean squared error loss |
+| `CrossEntropyLoss` | Cross-entropy loss |
+
+### Optimization
+
+| Export | Description |
+|---|---|
+| `SGD` | Stochastic gradient descent with momentum support |
+
+### Probability Distributions
+
+| Export | Description |
+|---|---|
+| `Categorical` | Categorical probability distribution |
+
+### Importing the public API
+
+All the above components can be imported from the package entry point:
+
+```javascript
+import {
+  Tensor,
+  Parameter,
+
+  Module,
+  Linear,
+  Sequential,
+
+  ReLU,
+  Sigmoid,
+  Tanh,
+  Softmax,
+
+  RNNCell,
+  RNN,
+  GRUCell,
+  GRU,
+  LSTMCell,
+  LSTM,
+
+  MSELoss,
+  CrossEntropyLoss,
+
+  SGD,
+  Categorical
+} from "@AkashPrajapathi/androiddl-js";
+```
+
+---
 
 ## Examples and Experiments
 
@@ -413,8 +764,13 @@ Explore the [GitHub repository](https://github.com/AkashPrajapathi/androiddl-js)
 The project includes experiments involving:
 
 - Tensor operations and automatic differentiation
+- Tensor slicing and manipulation
 - Neural network construction and training
+- Recurrent neural networks: RNN, GRU, and LSTM
 - Snake AI and reinforcement learning
+- Neural network inference directly in the browser
+
+---
 
 ## Project Goals
 
@@ -426,8 +782,12 @@ The project focuses on:
 - Implementing numerical operations and broadcasting
 - Exploring computation graphs and automatic differentiation
 - Designing a composable neural network module system
+- Implementing recurrent neural network architectures
 - Implementing loss functions and optimization algorithms
 - Experimenting with neural networks in JavaScript applications
+- Understanding how deep learning frameworks work internally by building one from scratch
+
+---
 
 ## Contributing
 
@@ -439,6 +799,8 @@ Contributions, bug reports, feature requests, and suggestions are welcome.
 4. Submit a pull request describing the improvement.
 
 For bugs and feature requests, use [GitHub Issues](https://github.com/AkashPrajapathi/androiddl-js/issues).
+
+---
 
 ## License
 
