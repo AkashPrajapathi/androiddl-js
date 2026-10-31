@@ -20,6 +20,7 @@ import { SliceOp } from "./op/slice-op.js"
 import { ConcatenateOp } from "./op/concatenate-op.js"
 import { UnsqueezeOp } from "./op/unsqueeze-op.js"
 import { StackOp } from "./op/stack-op.js"
+import { SqueezeOp } from "./op/squeeze-op.js"
 
 export class Tensor {
     constructor(data, shape, requiresGrad = false, view = null) {
@@ -133,9 +134,12 @@ export class Tensor {
             newStrides[i] = this.strides[indices[i]]
         }
 
-        const x = new Tensor(this.data, newShape)
-        x.strides = newStrides
-        x.offset = this.offset
+        const x = Tensor.view(
+            this,
+            newShape,
+            newStrides,
+            this.offset
+        );
 
         if (this.requiresGrad) {
             x.requiresGrad = true
@@ -147,29 +151,46 @@ export class Tensor {
 
 
     transpose(dim0, dim1) {
-        if (dim0 >= dim1) {
-            throw new Error("dim0 can not greater or eqault to dim1")
+        const rank = this.shape.length;
+
+        if (!Number.isInteger(dim0) || !Number.isInteger(dim1)) {
+            throw new Error("Dimensions must be integers");
         }
 
-        const indices = new Array(this.shape.length)
-        for (let i = 0; i < this.shape.length; i++) {
-            indices[i] = i
+        if (dim0 < 0) dim0 += rank;
+        if (dim1 < 0) dim1 += rank;
+
+        if (
+            dim0 < 0 || dim0 >= rank ||
+            dim1 < 0 || dim1 >= rank
+        ) {
+            throw new Error("Dimension out of range");
         }
 
-        let a = indices[dim0]
-        let b = indices[dim1]
+        if (dim0 === dim1) {
+            return this;
+        }
 
-        indices[dim0] = b;
-        indices[dim1] = a;
+        const indices = Array.from(
+            { length: rank },
+            (_, i) => i
+        );
 
-        const output = this.permute(...indices)
+        [indices[dim0], indices[dim1]] =
+            [indices[dim1], indices[dim0]];
+
+        const output = this.permute(...indices);
 
         if (this.requiresGrad) {
-            output.requiresGrad = true
-            output.gradFn = new TransposeBackward([this], dim0, dim1)
+            output.requiresGrad = true;
+            output.gradFn = new TransposeBackward(
+                [this],
+                dim0,
+                dim1
+            );
         }
 
-        return output
+        return output;
     }
 
 
@@ -359,6 +380,10 @@ export class Tensor {
     unsqueeze(dim) {
         const op = new UnsqueezeOp()
         return op.apply(this, dim)
+    }
+
+    squeeze(dim = null) {
+        return new SqueezeOp().apply(this, dim);
     }
 
     static cat(tensors, dim) {

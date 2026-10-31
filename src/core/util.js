@@ -127,36 +127,45 @@ export function flattenToFloat32(data) {
 
 export function broadcastShape(aShape, bShape) {
     if (!Array.isArray(aShape) || !Array.isArray(bShape)) {
-        throw new Error("Shape must be 1D array")
+        throw new Error("Shape must be 1D array");
     }
 
-    let isAInt = aShape.every(v => Number.isInteger(v) && v > 0);
-    let isBInt = bShape.every(v => Number.isInteger(v) && v > 0);
+    const isAInt = aShape.every(
+        v => Number.isInteger(v) && v >= 0
+    );
+
+    const isBInt = bShape.every(
+        v => Number.isInteger(v) && v >= 0
+    );
 
     if (!isAInt || !isBInt) {
-        throw new Error("Shape must contain positive integer")
+        throw new Error("Shape must contain non-negative integers");
     }
 
-    const resultRank = Math.max(aShape.length, bShape.length)
-
-    const broadcastedShape = new Array(resultRank)
+    const resultRank = Math.max(aShape.length, bShape.length);
+    const broadcastedShape = new Array(resultRank);
 
     for (let i = 0; i < resultRank; i++) {
-        const aIdx = aShape.length - 1 - (resultRank - 1 - i)
-        const bIdx = bShape.length - 1 - (resultRank - 1 - i)
+        const aIdx = aShape.length - 1 - (resultRank - 1 - i);
+        const bIdx = bShape.length - 1 - (resultRank - 1 - i);
 
-        const aDim = aIdx >= 0 ? aShape[aIdx] : 1
-        const bDim = bIdx >= 0 ? bShape[bIdx] : 1
+        const aDim = aIdx >= 0 ? aShape[aIdx] : 1;
+        const bDim = bIdx >= 0 ? bShape[bIdx] : 1;
 
-        if (aDim === bDim || aDim === 1 || bDim === 1) {
-            broadcastedShape[i] = Math.max(aDim, bDim)
+        if (aDim === bDim) {
+            broadcastedShape[i] = aDim;
+        } else if (aDim === 1) {
+            broadcastedShape[i] = bDim;
+        } else if (bDim === 1) {
+            broadcastedShape[i] = aDim;
         } else {
-            throw new Error(`Cannot broadcast shape ${aShape.toString()} and ${bShape.toString()}`)
+            throw new Error(
+                `Cannot broadcast shape ${aShape} and ${bShape}`
+            );
         }
     }
 
-    return broadcastedShape
-
+    return broadcastedShape;
 }
 
 export function broadcastStrides(inputShape, inputStrides, outputShape) {
