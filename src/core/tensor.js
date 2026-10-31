@@ -18,6 +18,8 @@ import { LogOp } from "./op/log-op.js"
 import { TanhOp } from "./op/tanh-op.js"
 import { SliceOp } from "./op/slice-op.js"
 import { ConcatenateOp } from "./op/concatenate-op.js"
+import { UnsqueezeOp } from "./op/unsqueeze-op.js"
+import { StackOp } from "./op/stack-op.js"
 
 export class Tensor {
     constructor(data, shape, requiresGrad = false, view = null) {
@@ -354,9 +356,18 @@ export class Tensor {
         return op.apply(this, ...specs)
     }
 
+    unsqueeze(dim) {
+        const op = new UnsqueezeOp()
+        return op.apply(this, dim)
+    }
+
     static cat(tensors, dim) {
         const op = new ConcatenateOp()
         return op.apply(tensors, dim)
+    }
+
+    static stack(tensors, dim = 0) {
+        return new StackOp().apply(tensors, dim);
     }
 
     #isContiguous(shape, strides) {

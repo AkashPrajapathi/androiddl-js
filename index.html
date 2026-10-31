@@ -33,8 +33,10 @@
             }
         }
 
-        function makeTensor(data, shape) {
-            return new Tensor(Float32Array.from(data), shape);
+        function makeTensor(data, shape, requiresGrad = false) {
+            const x = new Tensor(Float32Array.from(data), shape);
+            x.requiresGrad = requiresGrad
+            return x
         }
 
         function values(tensor) {
@@ -624,6 +626,363 @@
             );
         });
 
+
+        function assertEqual(actual, expected, message) {
+            assert(
+                actual === expected,
+                `${message}: got ${actual}, expected ${expected}`
+            );
+        }
+
+        // ==================================================
+        // UNSQUEEZE FORWARD TESTS
+        // ==================================================
+
+        test("Unsqueeze at dim 0", () => {
+            const x = makeTensor([1, 2, 3], [3]);
+
+            const y = x.unsqueeze(0);
+
+            assertTensor(y, [1, 3], [1, 2, 3], "Unsqueeze dim 0");
+        });
+
+        test("Unsqueeze at dim 1", () => {
+            const x = makeTensor([1, 2, 3], [3]);
+
+            const y = x.unsqueeze(1);
+
+            assertTensor(y, [3, 1], [1, 2, 3], "Unsqueeze dim 1");
+        });
+
+        test("Unsqueeze with negative dim", () => {
+            const x = makeTensor([1, 2, 3], [3]);
+
+            const y = x.unsqueeze(-1);
+
+            assertTensor(y, [3, 1], [1, 2, 3], "Unsqueeze -1");
+        });
+
+        test("Unsqueeze 3D tensor", () => {
+            const x = makeTensor(
+                [1, 2, 3, 4, 5, 6],
+                [2, 3]
+            );
+
+            const y = x.unsqueeze(1);
+
+            assertTensor(
+                y,
+                [2, 1, 3],
+                [1, 2, 3, 4, 5, 6],
+                "Unsqueeze 3D"
+            );
+        });
+
+        test("Unsqueeze permuted tensor", () => {
+            const base = makeTensor([1, 2, 3, 4, 5, 6], [2, 3]);
+            const x = base.permute(1, 0);
+
+            const y = x.unsqueeze(1);
+            assertTensor(
+                y,
+                [3, 1, 2],
+                [1, 4, 2, 5, 3, 6],
+                "Unsqueeze permuted"
+            );
+        });
+
+        test("Unsqueeze reversed tensor", () => {
+            const base = makeTensor([1, 2, 3, 4, 5, 6], [2, 3]);
+            const x = base.slice(":", "::-1");
+
+            const y = x.unsqueeze(0);
+
+            assertTensor(
+                y,
+                [1, 2, 3],
+                [3, 2, 1, 6, 5, 4],
+                "Unsqueeze reversed"
+            );
+
+            assert(
+                y.strides[1] === x.strides[0],
+                "Original negative stride was not preserved"
+            );
+        });
+
+        test("Unsqueeze shares storage", () => {
+            const x = makeTensor([1, 2, 3], [3]);
+            const y = x.unsqueeze(0);
+
+            assert(y.data === x.data, "Storage was copied");
+
+            y.data[0] = 100;
+
+            assertEqual(x.data[0], 100, "Shared storage");
+        });
+
+        test("Invalid unsqueeze dimension", () => {
+            const x = makeTensor([1, 2, 3], [3]);
+
+            assertThrows(() => x.unsqueeze(2), "Invalid positive dim");
+            assertThrows(() => x.unsqueeze(-3), "Invalid negative dim");
+        });
+
+
+        // ==================================================
+        // UNSQUEEZE BACKWARD TESTS
+        // ==================================================
+
+        test("Unsqueeze backward dim 0", () => {
+            const x = makeTensor([1, 2, 3], [3]);
+            x.requiresGrad = true;
+
+            const y = x.unsqueeze(0);
+            const loss = y.mul(
+                makeTensor([10, 20, 30], [1, 3])
+            ).sum();
+
+            loss.backward();
+
+            assertTensor(
+                x.grad,
+                [3],
+                [10, 20, 30],
+                "Unsqueeze backward dim 0"
+            );
+        });
+
+        test("Unsqueeze backward dim 1", () => {
+            const x = makeTensor([1, 2, 3], [3]);
+            x.requiresGrad = true;
+
+            const y = x.unsqueeze(1);
+            const loss = y.mul(
+                makeTensor([10, 20, 30], [3, 1])
+            ).sum();
+
+            loss.backward();
+
+            assertTensor(
+                x.grad,
+                [3],
+                [10, 20, 30],
+                "Unsqueeze backward dim 1"
+            );
+        });
+
+        test("Unsqueeze backward with permuted input", () => {
+            const base = makeTensor([1, 2, 3, 4, 5, 6], [2, 3]);
+            const x = base.permute(1, 0);
+            x.requiresGrad = true;
+
+            const y = x.unsqueeze(1);
+
+            const weights = makeTensor(
+                [10, 20, 30, 40, 50, 60],
+                [3, 1, 2]
+            );
+
+            y.mul(weights).sum().backward();
+
+            assertTensor(
+                x.grad,
+                [3, 2],
+                [10, 20, 30, 40, 50, 60],
+                "Permuted backward"
+            );
+        });
+
+        test("Unsqueeze backward with reversed input", () => {
+            const base = makeTensor([1, 2, 3, 4, 5, 6], [2, 3]);
+            const x = base.slice(":", "::-1");
+            x.requiresGrad = true;
+
+            const y = x.unsqueeze(0);
+
+            const weights = makeTensor(
+                [10, 20, 30, 40, 50, 60],
+                [1, 2, 3]
+            );
+
+            y.mul(weights).sum().backward();
+
+            assertTensor(
+                x.grad,
+                [2, 3],
+                [10, 20, 30, 40, 50, 60],
+                "Reversed backward"
+            );
+        });
+
+        test("Stack 1D tensors dim 0", () => {
+            const a = makeTensor([1, 2, 3], [3]);
+            const b = makeTensor([4, 5, 6], [3]);
+
+            const result = Tensor.stack([a, b], 0);
+
+            assertTensor(result, [2, 3], [1, 2, 3, 4, 5, 6]);
+        });
+
+        test("Stack 1D tensors dim 1", () => {
+            const a = makeTensor([1, 2, 3], [3]);
+            const b = makeTensor([4, 5, 6], [3]);
+
+            const result = Tensor.stack([a, b], 1);
+
+            assertTensor(result, [3, 2], [1, 4, 2, 5, 3, 6]);
+        });
+
+        test("Stack 2D tensors dim 0", () => {
+            const a = makeTensor([1, 2, 3, 4], [2, 2]);
+            const b = makeTensor([5, 6, 7, 8], [2, 2]);
+
+            const result = Tensor.stack([a, b], 0);
+
+            assertTensor(result, [2, 2, 2], [1, 2, 3, 4, 5, 6, 7, 8]);
+        });
+
+        test("Stack 2D tensors dim 1", () => {
+            const a = makeTensor([1, 2, 3, 4], [2, 2]);
+            const b = makeTensor([5, 6, 7, 8], [2, 2]);
+
+            const result = Tensor.stack([a, b], 1);
+
+            assertTensor(result, [2, 2, 2], [1, 2, 5, 6, 3, 4, 7, 8]);
+        });
+
+        test("Stack 2D tensors dim 2", () => {
+            const a = makeTensor([1, 2, 3, 4], [2, 2]);
+            const b = makeTensor([5, 6, 7, 8], [2, 2]);
+
+            const result = Tensor.stack([a, b], 2);
+
+            assertTensor(result, [2, 2, 2], [1, 5, 2, 6, 3, 7, 4, 8]);
+        });
+
+        test("Stack with negative dim", () => {
+            const a = makeTensor([1, 2, 3], [3]);
+            const b = makeTensor([4, 5, 6], [3]);
+
+            const result = Tensor.stack([a, b], -1);
+
+            assertTensor(result, [3, 2], [1, 4, 2, 5, 3, 6]);
+        });
+
+        test("Stack multiple tensors", () => {
+            const a = makeTensor([1, 2], [2]);
+            const b = makeTensor([3, 4], [2]);
+            const c = makeTensor([5, 6], [2]);
+
+            const result = Tensor.stack([a, b, c], 0);
+
+            assertTensor(result, [3, 2], [1, 2, 3, 4, 5, 6]);
+        });
+
+        test("Stack non-contiguous tensors", () => {
+            const a = makeTensor([1, 2, 3, 4, 5, 6], [2, 3]).permute(1, 0);
+            const b = makeTensor([7, 8, 9, 10, 11, 12], [2, 3]).permute(1, 0);
+
+            const result = Tensor.stack([a, b], 0);
+
+            assertTensor(result, [2, 3, 2], [1, 4, 2, 5, 3, 6, 7, 10, 8, 11, 9, 12]);
+        });
+
+        test("Stack rejects empty list", () => {
+            assertThrows(() => Tensor.stack([]));
+        });
+
+        test("Stack rejects mismatched shapes", () => {
+            const a = makeTensor([1, 2], [2]);
+            const b = makeTensor([1, 2, 3], [3]);
+
+            assertThrows(() => Tensor.stack([a, b]));
+        });
+
+        test("Stack rejects invalid dimension", () => {
+            const a = makeTensor([1, 2], [2]);
+            const b = makeTensor([3, 4], [2]);
+
+            assertThrows(() => Tensor.stack([a, b], 2));
+        });
+
+        test("Stack backward dim 0", () => {
+            const a = makeTensor([1, 2, 3], [3], true);
+            const b = makeTensor([4, 5, 6], [3], true);
+
+            const result = Tensor.stack([a, b], 0);
+
+            result.backward(
+                makeTensor([1, 2, 3, 4, 5, 6], [2, 3])
+            );
+
+            assertArray(a.grad.data, [1, 2, 3]);
+            assertArray(b.grad.data, [4, 5, 6]);
+        });
+
+        test("Stack backward dim 1", () => {
+            const a = makeTensor([1, 2, 3], [3], true);
+            const b = makeTensor([4, 5, 6], [3], true);
+
+            const result = Tensor.stack([a, b], 1);
+
+            result.backward(
+                makeTensor([1, 2, 3, 4, 5, 6], [3, 2])
+            );
+
+            assertArray(a.grad.data, [1, 3, 5]);
+            assertArray(b.grad.data, [2, 4, 6]);
+        });
+
+        test("Stack backward multiple tensors", () => {
+            const a = makeTensor([1, 2], [2], true);
+            const b = makeTensor([3, 4], [2], true);
+            const c = makeTensor([5, 6], [2], true);
+
+            const result = Tensor.stack([a, b, c], 0);
+
+            result.backward(
+                makeTensor([1, 2, 3, 4, 5, 6], [3, 2])
+            );
+
+            assertArray(a.grad.data, [1, 2]);
+            assertArray(b.grad.data, [3, 4]);
+            assertArray(c.grad.data, [5, 6]);
+        });
+
+        test("Stack backward negative dim", () => {
+            const a = makeTensor([1, 2, 3], [3], true);
+            const b = makeTensor([4, 5, 6], [3], true);
+
+            const result = Tensor.stack([a, b], -1);
+
+            result.backward(
+                makeTensor([1, 2, 3, 4, 5, 6], [3, 2])
+            );
+
+            assertArray(a.grad.data, [1, 3, 5]);
+            assertArray(b.grad.data, [2, 4, 6]);
+        });
+
+        test("Stack backward through permuted inputs", () => {
+            const baseA = makeTensor([1, 2, 3, 4, 5, 6], [2, 3], true);
+            const baseB = makeTensor([7, 8, 9, 10, 11, 12], [2, 3], true);
+
+            const a = baseA.permute(1, 0);
+            const b = baseB.permute(1, 0);
+
+            const result = Tensor.stack([a, b], 0);
+
+            result.backward(
+                makeTensor(
+                    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                    [2, 3, 2]
+                )
+            );
+
+            assertArray(baseA.grad.data, [1, 2, 3, 4, 5, 6]);
+            assertArray(baseB.grad.data, [7, 8, 9, 10, 11, 12]);
+        });
 
         // ==================================================
         // SUMMARY
