@@ -7,7 +7,7 @@ AndroidDL.js brings tensor computation, automatic differentiation, neural networ
 Inspired by PyTorch, the project explores how deep learning frameworks work internally—from tensor operations and computation graphs to trainable parameters and recurrent neural network architectures.
 
 - **Language:** JavaScript (ES Modules)
-- **Package:** `@AkashPrajapathi/androiddl-js`
+- **Package:** `androiddl`
 - **Package registry:** GitHub Packages
 - **Build tool:** Vite
 
@@ -67,21 +67,11 @@ The demo loads trained model weights and runs inference using AndroidDL.js—no 
 
 ## Installation
 
-### Option 1: Install with npm
-
-Install AndroidDL.js from GitHub Packages:
+Install AndroidDL.js with npm:
 
 ```bash
-npm install @AkashPrajapathi/androiddl-js
+npm install androiddl
 ```
-
-If npm cannot locate the package, configure the GitHub Packages registry in your project's `.npmrc`:
-
-```ini
-@AkashPrajapathi:registry=https://npm.pkg.github.com
-```
-
-For a public package, try installing without a token first. If your environment requires authentication, follow the [GitHub Packages npm registry guide](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry).
 
 Import the library in JavaScript:
 
@@ -94,62 +84,15 @@ import {
   RNN,
   GRU,
   LSTM
-} from "@AkashPrajapathi/androiddl-js";
+} from "androiddl";
 ```
-
-### Option 2: Use directly in a browser
-
-You can use the generated ES module build without installing the package through npm.
-
-First, build the library:
-
-```bash
-npm install
-npm run build
-```
-
-Copy the generated `dist/` directory into your web project, or serve it from your project's root.
-
-Then import the library using a relative URL:
-
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AndroidDL.js Example</title>
-</head>
-<body>
-  <script type="module">
-    import {
-      Tensor,
-      Linear
-    } from "./dist/androiddl.js";
-
-    const layer = new Linear(2, 3);
-
-    const input = new Tensor([[1, 2]], [1, 2]);
-    const output = layer.call(input);
-
-    console.log(output);
-  </script>
-</body>
-</html>
-```
-
-Serve the page through a local development server rather than opening the HTML file directly. This avoids browser module-loading restrictions.
-
-**Build output:** The current Vite configuration generates `dist/androiddl.js` and `dist/androiddl.umd.cjs`. The examples above use the ES module build.
-
----
 
 ## Quick Start
 
 ### 1. Create tensors
 
 ```javascript
-import { Tensor } from "@AkashPrajapathi/androiddl-js";
+import { Tensor } from "androiddl";
 
 const a = new Tensor(
   [
@@ -179,7 +122,7 @@ Tensors represent numerical data together with shape and stride information. Ten
 ### 2. Automatic differentiation
 
 ```javascript
-import { Tensor } from "@AkashPrajapathi/androiddl-js";
+import { Tensor } from "androiddl";
 
 const x = new Tensor([2], [], true);
 const y = x.mul(x);
@@ -205,7 +148,7 @@ import {
   Module,
   Linear,
   ReLU
-} from "@AkashPrajapathi/androiddl-js";
+} from "androiddl";
 
 class MyNetwork extends Module {
   constructor() {
@@ -449,7 +392,7 @@ import {
   Sequential,
   Linear,
   ReLU
-} from "@AkashPrajapathi/androiddl-js";
+} from "androiddl";
 
 const model = new Sequential(
   new Linear(4, 8),
@@ -579,7 +522,7 @@ The LSTM final cell state has the same shape:
 import {
   Tensor,
   LSTM
-} from "@AkashPrajapathi/androiddl-js";
+} from "androiddl";
 
 const sequenceLength = 10;
 const batchSize = 4;
@@ -627,7 +570,7 @@ Example:
 import {
   Tensor,
   MSELoss
-} from "@AkashPrajapathi/androiddl-js";
+} from "androiddl";
 
 const prediction = new Tensor([0.8], [1]);
 const target = new Tensor([1.0], [1]);
@@ -643,7 +586,7 @@ console.log(loss);
 `SGD` implements stochastic gradient descent and supports momentum and dampening options.
 
 ```javascript
-import { SGD } from "@AkashPrajapathi/androiddl-js";
+import { SGD } from "androiddl";
 
 const optimizer = new SGD(model.parameters(), {
   lr: 0.01,
@@ -752,7 +695,7 @@ import {
 
   SGD,
   Categorical
-} from "@AkashPrajapathi/androiddl-js";
+} from "androiddl";
 ```
 
 ---

@@ -1,6 +1,7 @@
 {
-  "name": "@AkashPrajapathi/androiddl-js",
+  "name": "androiddl",
   "version": "1.2.0",
+  "description": "A lightweight PyTorch-inspired deep learning library for JavaScript",
   "type": "module",
   "main": "./dist/androiddl.umd.cjs",
   "module": "./dist/androiddl.js",
@@ -22,6 +23,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AkashPrajapathi/androiddl-js.git"
+    "url": "https://github.com/AkashPrajapathi/androiddl-js.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }
